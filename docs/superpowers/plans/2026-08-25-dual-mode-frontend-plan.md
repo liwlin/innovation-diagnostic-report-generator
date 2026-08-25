@@ -280,31 +280,31 @@ Record field-mapping coverage, save-state behavior, conflict freeze/reload, serv
 - Consumes: role from `/api/session`, recycle/admin/audit APIs, and API client.
 - Produces: role-aware navigation, recycle/restore, reasoned permanent delete, account management, audit filters, and complete logout cleanup.
 
-- [ ] **Step 1: Write failing role and destructive-action tests**
+- [x] **Step 1: Write failing role and destructive-action tests**
 
 Test that teacher DOM never contains permanent-delete/user-management controls, admin permanent deletion cannot call the API without a trimmed reason of at least four characters, restore appears for both roles, and logout clears browser-only AI configuration for NAS mode before redirecting to login.
 
-- [ ] **Step 2: Run Node tests and verify missing views**
+- [x] **Step 2: Run Node tests and verify missing views**
 
 Run: `node --test tests/js/admin-views.test.js`
 
 Expected: missing module/assertion failures.
 
-- [ ] **Step 3: Implement recycle and admin workflows**
+- [x] **Step 3: Implement recycle and admin workflows**
 
 Use two-step destructive confirmation: select record, show student/batch/generation count and backup-retention warning, then require a typed reason. User management supports create, role/status change, password reset, and never renders password hashes or session data. Audit table supports actor/action/target/date filters and displays metadata as escaped key/value text.
 
-- [ ] **Step 4: Implement logout privacy cleanup**
+- [x] **Step 4: Implement logout privacy cleanup**
 
 Flush pending record saves, call logout with CSRF, remove only NAS-mode browser AI keys and transient UI state, and leave Pages local business data untouched.
 
-- [ ] **Step 5: Run Node tests and keyboard/static checks**
+- [x] **Step 5: Run Node tests and keyboard/static checks**
 
 Run: `node --test tests/js/admin-views.test.js tests/js/api-client.test.js`
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit role-aware management UI**
+- [x] **Step 6: Commit role-aware management UI**
 
 Record teacher/admin DOM boundary, reason validation, backup warning, escaping, and logout cleanup.
 

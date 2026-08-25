@@ -23,6 +23,31 @@
     rootNode.replaceChildren(content);
   }
 
+  function navigationItems(role) {
+    const items = [
+      { view: 'records', label: '全部记录', icon: 'records' },
+      { view: 'trash', label: '回收站', icon: 'trash' },
+    ];
+    if (role === 'admin') {
+      items.push(
+        { view: 'users', label: '账号管理', icon: 'users', admin: true },
+        { view: 'audit', label: '操作审计', icon: 'audit', admin: true },
+      );
+    }
+    return items;
+  }
+
+  function validatePermanentDelete(role, reason) {
+    if (role !== 'admin') return { ok: false, message: '需要管理员权限' };
+    const normalized = String(reason || '').trim();
+    if (normalized.length < 4) return { ok: false, message: '请填写至少 4 个字符的删除原因' };
+    return { ok: true, reason: normalized };
+  }
+
+  function nasLogoutStorageKeys() {
+    return ['mkseed_diag_aicfg_v1', 'mkseed_nas_ui_v1'];
+  }
+
   function icon(name) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -82,8 +107,11 @@
   }
 
   function shell({ session, version, activeView, onNavigate, onLogout, content }) {
-    const adminLinks = session.user.role === 'admin'
-      ? [element('div', { className: 'nav-label' }, '管理员'), navButton('账号管理', 'users', activeView === 'users', () => onNavigate('users')), navButton('操作审计', 'audit', activeView === 'audit', () => onNavigate('audit'))]
+    const navigation = navigationItems(session.user.role);
+    const primaryLinks = navigation.filter((item) => !item.admin).map((item) => navButton(item.label, item.icon, activeView === item.view, () => onNavigate(item.view)));
+    const adminItems = navigation.filter((item) => item.admin);
+    const adminLinks = adminItems.length
+      ? [element('div', { className: 'nav-label' }, '管理员'), ...adminItems.map((item) => navButton(item.label, item.icon, activeView === item.view, () => onNavigate(item.view)))]
       : [];
     return element(
       'div',
@@ -92,8 +120,7 @@
         'aside',
         { className: 'sidebar', 'aria-label': '主导航' },
         element('img', { className: 'sidebar-logo', src: '/assets/logo-lockup.png', alt: 'MakerSeed 种子创客工坊' }),
-        navButton('全部记录', 'records', activeView === 'records', () => onNavigate('records')),
-        navButton('回收站', 'trash', activeView === 'trash', () => onNavigate('trash')),
+        primaryLinks,
         adminLinks,
       ),
       element(
@@ -110,7 +137,7 @@
     );
   }
 
-  function recordWorkspace({ records, filters, trashed, loading, error, onFilter, onNew, onEdit, onTrash, onRestore, onReports }) {
+  function recordWorkspace({ records, filters, trashed, isAdmin, loading, error, onFilter, onNew, onEdit, onTrash, onRestore, onPermanentDelete, onReports }) {
     const search = element('input', { className: 'control', value: filters.q || '', placeholder: '搜索学生姓名', 'aria-label': '搜索学生姓名' });
     search.addEventListener('input', () => onFilter({ ...filters, q: search.value }));
     const filterNames = [['date_from', '日期'], ['batch_id', '批次'], ['grade', '年级'], ['recommended_class', '推荐班级'], ['created_by', '创建者'], ['generation_status', '生成状态']];
@@ -135,6 +162,7 @@
         trashed ? element('button', { className: 'text-button', type: 'button', onClick: () => onRestore(record) }, '恢复') : element('button', { className: 'text-button', type: 'button', onClick: () => onEdit(record) }, '编辑'),
         element('button', { className: 'text-button', type: 'button', onClick: () => onReports(record) }, '查看报告'),
         trashed ? null : element('button', { className: 'text-button danger-link', type: 'button', onClick: () => onTrash(record) }, '移入回收站'),
+        trashed && isAdmin ? element('button', { className: 'text-button danger-link', type: 'button', onClick: () => onPermanentDelete(record) }, '永久删除') : null,
       ),
     ));
     const table = element(
@@ -182,5 +210,53 @@
     );
   }
 
-  return Object.freeze({ element, loginView, newRecordDialog, recordWorkspace, replace, shell });
+  function permanentDeleteDialog({ record, onCancel, onConfirm, error }) {
+    const reason = element('textarea', { className: 'control', rows: '4', placeholder: '请填写删除原因（至少 4 个字符）' });
+    return element(
+      'div',
+      { className: 'dialog-backdrop' },
+      element(
+        'form',
+        { className: 'dialog', role: 'dialog', 'aria-modal': 'true', onSubmit(event) { event.preventDefault(); onConfirm(reason.value); } },
+        element('h2', {}, '永久删除记录'),
+        element('p', {}, `即将删除“${record.student_name}”的在线记录和正式报告。`),
+        element('p', { className: 'error-message' }, '历史加密备份在保留期内仍可能包含旧副本。'),
+        element('div', { className: 'field' }, element('label', {}, '删除原因'), reason),
+        error ? element('p', { className: 'error-message', role: 'alert' }, error) : null,
+        element('div', { className: 'dialog-actions' }, element('button', { className: 'secondary-button', type: 'button', onClick: onCancel }, '取消'), element('button', { className: 'primary-button danger-button', type: 'submit' }, '确认永久删除')),
+      ),
+    );
+  }
+
+  function userWorkspace({ users, error, onCreate, onToggle, onReset }) {
+    const username = element('input', { className: 'control', placeholder: '账号', required: 'required' });
+    const displayName = element('input', { className: 'control', placeholder: '显示名', required: 'required' });
+    const role = element('select', { className: 'control' }, element('option', { value: 'teacher' }, '老师'), element('option', { value: 'admin' }, '管理员'));
+    const password = element('input', { className: 'control', type: 'password', placeholder: '初始密码（至少 12 位）', required: 'required' });
+    const form = element(
+      'form',
+      { className: 'admin-create-form', onSubmit(event) { event.preventDefault(); onCreate({ username: username.value, display_name: displayName.value, role: role.value, password: password.value }); } },
+      username, displayName, role, password,
+      element('button', { className: 'new-button', type: 'submit' }, '创建账号'),
+    );
+    const rows = users.map((user) => element(
+      'tr', {}, element('td', {}, user.username), element('td', {}, user.display_name), element('td', {}, user.role === 'admin' ? '管理员' : '老师'), element('td', {}, user.is_active ? '启用' : '停用'),
+      element('td', { className: 'row-actions' }, element('button', { className: 'text-button', type: 'button', onClick: () => onToggle(user) }, user.is_active ? '停用' : '启用'), element('button', { className: 'text-button', type: 'button', onClick: () => onReset(user) }, '重置密码')),
+    ));
+    return element('section', {}, form, error ? element('p', { className: 'error-message' }, error) : null, element('div', { className: 'table-frame' }, element('table', { className: 'record-table' }, element('thead', {}, element('tr', {}, ...['账号', '显示名', '角色', '状态', '操作'].map((label) => element('th', { scope: 'col' }, label)))), element('tbody', {}, rows))));
+  }
+
+  function passwordResetDialog({ user, onCancel, onConfirm, error }) {
+    const password = element('input', { className: 'control', type: 'password', autocomplete: 'new-password', placeholder: '新密码（至少 12 位）' });
+    return element('div', { className: 'dialog-backdrop' }, element('form', { className: 'dialog', role: 'dialog', 'aria-modal': 'true', onSubmit(event) { event.preventDefault(); onConfirm(password.value); } }, element('h2', {}, `重置 ${user.display_name} 的密码`), element('div', { className: 'field' }, element('label', {}, '新密码'), password), error ? element('p', { className: 'error-message', role: 'alert' }, error) : null, element('div', { className: 'dialog-actions' }, element('button', { className: 'secondary-button', type: 'button', onClick: onCancel }, '取消'), element('button', { className: 'primary-button', type: 'submit' }, '确认重置'))));
+  }
+
+  function auditWorkspace({ items, action, loading, error, onActionFilter }) {
+    const actionInput = element('input', { className: 'control', value: action || '', placeholder: '按动作筛选', 'aria-label': '按动作筛选' });
+    actionInput.addEventListener('change', () => onActionFilter(actionInput.value));
+    const rows = items.map((event) => element('tr', {}, element('td', {}, String(event.created_at).replace('T', ' ').slice(0, 19)), element('td', {}, event.actor_user_id || '系统'), element('td', {}, event.action), element('td', {}, event.target_type), element('td', {}, event.target_id || '—'), element('td', {}, event.target_label || '—')));
+    return element('section', {}, element('div', { className: 'toolbar audit-toolbar' }, actionInput), error ? element('p', { className: 'error-message' }, error) : null, element('div', { className: 'table-frame' }, element('table', { className: 'record-table' }, element('thead', {}, element('tr', {}, ...['时间', '操作者', '动作', '目标类型', '目标 ID', '标签'].map((label) => element('th', { scope: 'col' }, label)))), element('tbody', {}, rows)), loading ? element('div', { className: 'status-line' }, '正在加载审计…') : null));
+  }
+
+  return Object.freeze({ auditWorkspace, element, loginView, nasLogoutStorageKeys, navigationItems, newRecordDialog, passwordResetDialog, permanentDeleteDialog, recordWorkspace, replace, shell, userWorkspace, validatePermanentDelete });
 });
