@@ -203,6 +203,84 @@ def update_evaluation(
     return get_editor_document(db, evaluation_id)
 
 
+def _set_trashed_state(
+    db: Session,
+    *,
+    evaluation_id: UUID,
+    actor: User,
+    trashed: bool,
+) -> dict[str, object]:
+    evaluation = db.get(Evaluation, evaluation_id)
+    if evaluation is None:
+        raise ApiError("evaluation_not_found", "未找到该记录", 404)
+    student = db.get(Student, evaluation.student_id)
+    if student is None:
+        raise ApiError("evaluation_corrupt", "记录关联不完整，请联系管理员", 500)
+    already_in_state = (evaluation.deleted_at is not None) == trashed
+    if already_in_state:
+        return get_editor_document(db, evaluation_id)
+    db.add(
+        EvaluationVersion(
+            evaluation_id=evaluation.id,
+            version=evaluation.version,
+            snapshot=_evaluation_snapshot(evaluation, student),
+            edited_by_id=actor.id,
+        )
+    )
+    evaluation.deleted_at = datetime.now(UTC) if trashed else None
+    evaluation.deleted_by_id = actor.id if trashed else None
+    evaluation.updated_by_id = actor.id
+    write_audit_event(
+        db,
+        actor_user_id=actor.id,
+        action="evaluation_trashed" if trashed else "evaluation_restored",
+        target_type="evaluation",
+        target_id=evaluation.id,
+        target_label=student.name,
+        metadata={"from_version": evaluation.version},
+    )
+    db.commit()
+    return get_editor_document(db, evaluation_id)
+
+
+def trash_evaluation(db: Session, *, evaluation_id: UUID, actor: User) -> dict[str, object]:
+    return _set_trashed_state(db, evaluation_id=evaluation_id, actor=actor, trashed=True)
+
+
+def restore_evaluation(db: Session, *, evaluation_id: UUID, actor: User) -> dict[str, object]:
+    return _set_trashed_state(db, evaluation_id=evaluation_id, actor=actor, trashed=False)
+
+
+def permanently_delete_evaluation(
+    db: Session,
+    *,
+    evaluation_id: UUID,
+    reason: str,
+    actor: User,
+) -> None:
+    evaluation = db.get(Evaluation, evaluation_id)
+    if evaluation is None:
+        raise ApiError("evaluation_not_found", "未找到该记录", 404)
+    if evaluation.deleted_at is None:
+        raise ApiError("trash_required", "请先将记录移入回收站", 409)
+    student = db.get(Student, evaluation.student_id)
+    if student is None:
+        raise ApiError("evaluation_corrupt", "记录关联不完整，请联系管理员", 500)
+    write_audit_event(
+        db,
+        actor_user_id=actor.id,
+        action="evaluation_permanently_deleted",
+        target_type="evaluation",
+        target_id=evaluation.id,
+        target_label="",
+        metadata={"reason": reason},
+    )
+    db.delete(evaluation)
+    db.flush()
+    db.delete(student)
+    db.commit()
+
+
 def _encode_cursor(updated_at: datetime, evaluation_id: UUID) -> str:
     encoded = json.dumps([updated_at.isoformat(), str(evaluation_id)], separators=(",", ":"))
     return base64.urlsafe_b64encode(encoded.encode("utf-8")).decode("ascii").rstrip("=")

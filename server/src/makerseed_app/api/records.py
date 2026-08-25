@@ -16,9 +16,10 @@ from ..schemas.records import (
     EvaluationCreate,
     EvaluationPage,
     EvaluationUpdate,
+    PermanentDeleteRequest,
 )
 from ..security.csrf import require_csrf
-from ..security.sessions import require_user
+from ..security.sessions import require_admin, require_user
 from ..services import records as record_service
 
 router = APIRouter(prefix="/api")
@@ -103,5 +104,41 @@ def update_evaluation(
         evaluation_id=evaluation_id,
         expected_version=request.version,
         request=request,
+        actor=actor,
+    )
+
+
+@router.post("/evaluations/{evaluation_id}/trash", response_model=EditorResponse)
+def trash_evaluation(
+    evaluation_id: UUID,
+    _csrf: Annotated[None, Depends(require_csrf)],
+    actor: Annotated[User, Depends(require_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, object]:
+    return record_service.trash_evaluation(db, evaluation_id=evaluation_id, actor=actor)
+
+
+@router.post("/evaluations/{evaluation_id}/restore", response_model=EditorResponse)
+def restore_evaluation(
+    evaluation_id: UUID,
+    _csrf: Annotated[None, Depends(require_csrf)],
+    actor: Annotated[User, Depends(require_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, object]:
+    return record_service.restore_evaluation(db, evaluation_id=evaluation_id, actor=actor)
+
+
+@router.delete("/evaluations/{evaluation_id}", status_code=204)
+def permanently_delete_evaluation(
+    evaluation_id: UUID,
+    request: PermanentDeleteRequest,
+    _csrf: Annotated[None, Depends(require_csrf)],
+    actor: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    record_service.permanently_delete_evaluation(
+        db,
+        evaluation_id=evaluation_id,
+        reason=request.reason,
         actor=actor,
     )

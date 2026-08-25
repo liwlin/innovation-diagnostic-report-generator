@@ -434,7 +434,7 @@ Stage the three implementation modules and three test files. The commit must rec
 - Consumes: role dependencies, record service, user/session models, and audit service.
 - Produces: trash/restore/permanent-delete behavior, account management, and paginated audit access.
 
-- [ ] **Step 1: Write failing permission-matrix tests**
+- [x] **Step 1: Write failing permission-matrix tests**
 
 ```python
 @pytest.mark.parametrize("role,expected", [("teacher", 403), ("admin", 204)])
@@ -453,25 +453,25 @@ def test_teacher_can_trash_and_restore(shared_teacher_client, evaluation, csrf):
 
 Also test empty deletion reason rejection, audit tombstone survival, disabled-user session invalidation, teacher denial from admin routes, and audit body redaction.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `uv run --project server pytest server/tests/test_recycle_bin.py server/tests/test_admin.py server/tests/test_audit.py -q`
 
 Expected: missing route/service failures.
 
-- [ ] **Step 3: Implement soft-delete and restore transactions**
+- [x] **Step 3: Implement soft-delete and restore transactions**
 
 Trash sets `deleted_at`, `deleted_by_id`, and increments `version`; restore clears deletion fields and increments `version`. Both preserve history and write audit in the same transaction. Live list defaults to `trashed=false`; recycle list uses `trashed=true`.
 
-- [ ] **Step 4: Implement admin permanent deletion without destroying audit**
+- [x] **Step 4: Implement admin permanent deletion without destroying audit**
 
 Validate a trimmed reason length of 4..500. Insert the audit tombstone first with target UUID, student display label reduced to the minimum useful value, actor, timestamp, and reason; delete generated-file database rows, evaluation versions, evaluation, and orphan student rows in one transaction. File deletion is delegated to the reporting plan's storage service and must fail closed if a path is outside the project report root.
 
-- [ ] **Step 5: Implement account and audit APIs**
+- [x] **Step 5: Implement account and audit APIs**
 
 Admins may create teacher/admin accounts, change display name/role/status, and reset passwords. Disabling a user revokes all sessions in the same transaction. Audit queries support actor, action, target ID, and date filters; response metadata excludes form bodies and secrets.
 
-- [ ] **Step 6: Run the full foundation suite**
+- [x] **Step 6: Run the full foundation suite**
 
 Run:
 
@@ -483,7 +483,7 @@ uv run --project server mypy server/src
 
 Expected: all commands exit 0.
 
-- [ ] **Step 7: Commit the complete foundation phase**
+- [x] **Step 7: Commit the complete foundation phase**
 
 Stage the admin/recycle/audit changes and tests. Record the permission matrix, session revocation, tombstone, full pytest, Ruff, and mypy results in Lore trailers.
 

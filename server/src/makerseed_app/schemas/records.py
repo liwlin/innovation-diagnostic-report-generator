@@ -107,6 +107,20 @@ class EvaluationUpdate(EvaluationCreate):
     version: int = Field(ge=1)
 
 
+class PermanentDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Annotated[str, StringConstraints(min_length=4, max_length=500)]
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 4:
+            raise ValueError("reason must contain at least four characters")
+        return normalized
+
+
 class UserSummary(BaseModel):
     id: UUID
     display_name: str

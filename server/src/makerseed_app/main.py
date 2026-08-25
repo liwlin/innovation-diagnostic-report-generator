@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from .api.admin import router as admin_router
 from .api.auth import router as auth_router
 from .api.records import router as records_router
 from .config import Settings
@@ -22,6 +23,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = build_engine(app_settings)
     app.state.session_factory = build_session_factory(app.state.engine)
     app.add_exception_handler(ApiError, api_error_handler)
+    app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(records_router)
 
