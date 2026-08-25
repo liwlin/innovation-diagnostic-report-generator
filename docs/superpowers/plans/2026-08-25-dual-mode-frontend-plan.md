@@ -166,7 +166,7 @@ Record local-mode compatibility, no API-mode business localStorage, debounce, CS
 - Consumes: foundation APIs, version metadata, CSRF cookie, and static source files.
 - Produces: `/`, `/editor`, `/static/*`, strict shell rendering, login, shared list, filters, create flow, and editor navigation.
 
-- [ ] **Step 1: Write failing API-client tests**
+- [x] **Step 1: Write failing API-client tests**
 
 ```javascript
 test('mutations send csrf and credentials', async () => {
@@ -180,11 +180,11 @@ test('mutations send csrf and credentials', async () => {
 
 Also test stable API error extraction, URLSearchParams encoding, no HTML insertion helpers, and 401 redirect events.
 
-- [ ] **Step 2: Write failing static-mode tests**
+- [x] **Step 2: Write failing static-mode tests**
 
 Assert `/` returns NAS shell with `storageMode:"api"`, `/editor` returns the existing report editor with API runtime injection, static paths use `nosniff`, and `/api/*` is never shadowed by static fallback.
 
-- [ ] **Step 3: Run tests and verify files/routes are absent**
+- [x] **Step 3: Run tests and verify files/routes are absent**
 
 Run:
 
@@ -195,15 +195,15 @@ uv run --project server pytest server/tests/test_static_modes.py -q
 
 Expected: missing module/404 failures.
 
-- [ ] **Step 4: Build semantic login and dashboard views**
+- [x] **Step 4: Build semantic login and dashboard views**
 
 The shell has no inline event attributes. `views.js` builds DOM nodes through `createElement` and `textContent`. Login posts credentials, then the dashboard loads all records available to the authenticated teacher. Filters include name text, date range, batch, grade, recommended class, creator, generation status, and recycle state. Each result shows visible name, batch/date, last editor/time, generation state, and an Edit button linking to `/editor?evaluation_id=<uuid>`.
 
-- [ ] **Step 5: Serve mode-specific static responses safely**
+- [x] **Step 5: Serve mode-specific static responses safely**
 
 `static_files.py` serves the shell and editor without directory listings or arbitrary file paths. Add `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `X-Frame-Options: DENY`, and a shell CSP limited to self. The legacy editor receives the narrow CSP exception required by the existing inline DC template and no third-party script origins.
 
-- [ ] **Step 6: Run frontend and backend tests**
+- [x] **Step 6: Run frontend and backend tests**
 
 Run:
 
@@ -215,7 +215,7 @@ uv run --project server ruff check server/src/makerseed_app/static_files.py
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit login/search shell**
+- [x] **Step 7: Commit login/search shell**
 
 Record same-origin, security-header, text-escaping, keyboard navigation, and search evidence.
 

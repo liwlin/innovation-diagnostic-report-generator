@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     logo_lockup_path: Path = Path("assets/logo-lockup.png")
     filename_pattern: str = "{name}_{date}_科创体验报告"
     promo_text: str = ""
+    static_root: Path = Path(".")
+    nas_web_root: Path = Path("nas-web")
 
     @model_validator(mode="after")
     def load_production_secrets(self) -> Settings:

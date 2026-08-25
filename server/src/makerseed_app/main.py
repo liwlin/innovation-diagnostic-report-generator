@@ -15,6 +15,7 @@ from .database import build_engine, build_session_factory
 from .errors import ApiError, api_error_handler
 from .reports.jobs import GenerationJobSettings, GenerationWorker, recover_stale_jobs
 from .reports.renderer import RenderAssets
+from .static_files import SecurityHeadersMiddleware, register_static_routes
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
     app.state.engine = build_engine(app_settings)
     app.state.session_factory = build_session_factory(app.state.engine)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_exception_handler(ApiError, api_error_handler)
     app.include_router(admin_router)
     app.include_router(auth_router)
@@ -72,6 +74,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "version": app_settings.app_version}
+
+    register_static_routes(app, app_settings)
 
     return app
 
