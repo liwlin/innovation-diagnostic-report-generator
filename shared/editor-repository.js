@@ -58,6 +58,10 @@
       return false;
     }
 
+    hasUnsaved() {
+      return this.pending != null;
+    }
+
     dispose() {
       this.disposed = true;
       this.pending = null;
@@ -191,6 +195,10 @@
 
     isConflicted() {
       return this.conflicted;
+    }
+
+    hasUnsaved() {
+      return this.pending != null || this.inflight != null || this.conflicted;
     }
 
     dispose() {

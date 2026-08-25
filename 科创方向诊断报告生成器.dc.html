@@ -8,6 +8,7 @@
 <script src="./shared/report-filename.js"></script>
 <script src="./shared/runtime-config.js"></script>
 <script src="./shared/editor-repository.js"></script>
+<script src="./shared/editor-mapping.js"></script>
 </head>
 <body>
 <x-dc>
@@ -139,6 +140,9 @@ input,select,textarea,button{font-family:inherit;}
         <sc-if value="{{ showWorkspaceControls }}">
           <button onClick="{{ toggleBatchEdit }}" style="font-size:12px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">编辑</button>
           <button onClick="{{ toggleHistory }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">历史批次</button>
+        </sc-if>
+        <sc-if value="{{ isApiMode }}">
+          <button onClick="{{ backToNasList }}" style="font-size:12px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">返回记录列表</button>
         </sc-if>
         <button onClick="{{ toggleAiSettings }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">AI设置</button>
       </div>
@@ -591,11 +595,36 @@ input,select,textarea,button{font-family:inherit;}
     </section>
   </doc-page>
 
+  <sc-if value="{{ isApiMode }}">
+    <div style="max-width:794px;margin:12px auto 104px;background:#fff;border:1px solid #D3D9E5;border-radius:10px;padding:14px 16px;box-sizing:border-box;">
+      <div style="font-size:14px;font-weight:800;color:#0F3ED2;margin-bottom:8px;">NAS 生成记录</div>
+      <sc-if value="{{ generationHistoryEmpty }}">
+        <div style="font-size:13px;color:#6B7280;">尚未生成报告</div>
+      </sc-if>
+      <sc-for list="{{ generationHistoryView }}" as="job" hint-placeholder-count="0">
+        <div style="border-top:1px solid #E7EBF3;padding:9px 0;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+          <div style="font-size:12.5px;color:#262626;">{{ job.label }}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <sc-for list="{{ job.files }}" as="file" hint-placeholder-count="0">
+              <a href="{{ file.href }}" style="font-size:12px;color:#0F3ED2;text-decoration:none;">{{ file.label }}</a>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
   <sc-if value="{{ !printing }}" hint-placeholder-val="{{ true }}">
     <div style="position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.98);border-top:1.5px solid #E7EBF3;padding:12px 16px calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;align-items:center;backdrop-filter:blur(8px);z-index:50;box-sizing:border-box;">
       <div style="display:flex;gap:10px;width:100%;max-width:520px;">
-        <button onClick="{{ exportImage }}" style="flex:1;padding:13px;border-radius:12px;border:1.5px solid #0F3ED2;background:#fff;color:#0F3ED2;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">保存图片</button>
-        <button onClick="{{ exportPDF }}" style="flex:1;padding:13px;border-radius:12px;border:none;background:#0F3ED2;color:#fff;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">打印 / 存 PDF</button>
+        <sc-if value="{{ showLocalExportControls }}">
+          <button onClick="{{ exportImage }}" style="flex:1;padding:13px;border-radius:12px;border:1.5px solid #0F3ED2;background:#fff;color:#0F3ED2;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">保存图片</button>
+          <button onClick="{{ exportPDF }}" style="flex:1;padding:13px;border-radius:12px;border:none;background:#0F3ED2;color:#fff;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">打印 / 存 PDF</button>
+        </sc-if>
+        <sc-if value="{{ isApiMode }}">
+          <button onClick="{{ backToNasList }}" style="flex:1;padding:13px;border-radius:12px;border:1.5px solid #0F3ED2;background:#fff;color:#0F3ED2;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">返回列表</button>
+          <button onClick="{{ requestServerGeneration }}" style="flex:1;padding:13px;border-radius:12px;border:none;background:#0F3ED2;color:#fff;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">{{ serverGenerationLabel }}</button>
+        </sc-if>
       </div>
       <sc-if value="{{ status }}">
         <div style="{{ statusStyle }}">{{ status }}</div>
@@ -732,6 +761,8 @@ class Component extends DCLogic {
     this.state.aiBusyField = null;
     this.state.promoText = this._loadPromoText();
     this.state.showPromoSettings = false;
+    this.state.serverGenerationBusy = false;
+    this.state.generationHistory = [];
     if(this.isApiMode){ this.state.status='正在加载记录…'; this.state.statusColor='#6B7280'; }
     var self=this;
     this.repository = MakerSeedEditorRepository.create({
@@ -743,48 +774,17 @@ class Component extends DCLogic {
   }
   _handleRepositoryStatus(update){
     if(!this.isApiMode) return;
-    var map={
-      loading:['正在加载记录…','#6B7280'], saving:['正在保存…','#6B7280'], saved:['已保存','#15803d'],
-      failed:['保存失败，请检查网络后重试','#991b1b'], conflict:['记录已被其他老师修改，请重新加载','#991b1b'],
-      signed_out:['登录已失效，请重新登录','#991b1b']
-    };
-    var value=map[update.state]||['','#6B7280'];
-    this.setState({status:value[0],statusColor:value[1]});
+    var value=MakerSeedEditorMapping.statusFor(update.state);
+    this.setState({status:value.text,statusColor:value.color});
   }
   _apiDocumentToState(doc){
-    var payload=Object.assign({},doc.payload||{});
-    var stu=Object.assign(emptyStudent(null,this.props.defaultChartType),payload,doc.student||{});
-    stu._apiEvaluationId=doc.evaluation_id; stu._apiVersion=doc.version;
-    if(!Array.isArray(stu.mods)) stu.mods=[];
-    if(!Array.isArray(stu.customMods)) stu.customMods=[];
-    if(!Array.isArray(stu.rates)||stu.rates.length!==5) stu.rates=[0,0,0,0,0];
-    if(!Array.isArray(stu.skills)||stu.skills.length!==3) stu.skills=[{m:'',p:'',r:0},{m:'',p:'',r:0},{m:'',p:'',r:0}];
-    var batch={
-      id:(doc.batch||{}).id,date:(doc.batch||{}).date||'',teacher:(doc.batch||{}).teacher||'',
-      fillDate:(doc.batch||{}).fill_date||todayISO(),_day:todayKey(),students:[stu]
-    };
-    return {
-      batches:[batch],activeBatch:0,activeStudent:0,mode:'form',printing:false,showHistory:false,
-      showCrossDay:false,batchEditOpen:false,status:'已保存',statusColor:'#15803d',exportBusy:false,
-      printIncludeInternal:false,addingMod:false,newModDraft:''
-    };
+    var state=MakerSeedEditorMapping.toWorkspace(doc,{defaultChartType:this.props.defaultChartType});
+    state.batches[0]._day=todayKey();
+    if(!state.batches[0].fillDate) state.batches[0].fillDate=todayISO();
+    return state;
   }
   _apiStateToDocument(state){
-    var batch=state.batches[state.activeBatch],stu=batch.students[state.activeStudent];
-    var classInfo=state.classList[Number(stu.classIndex)];
-    var payload={
-      schema_version:1,mods:(stu.mods||[]).slice(),customMods:(stu.customMods||[]).slice(),chart:stu.chart,
-      rates:(stu.rates||[]).slice(),skills:(stu.skills||[]).map(function(x){return Object.assign({},x);}),
-      obs1:stu.obs1||'',obs2:stu.obs2||'',dir:Number(stu.dir),reason:stu.reason||'',classIndex:stu.classIndex||'',
-      recommended_class:classInfo?classInfo.name:(stu.recommended_class||''),dirCustom:Object.assign({name:'',desc:''},stu.dirCustom||{}),
-      attendp:stu.attendp||'',talk:stu.talk||'',intent:stu.intent||'',why:stu.why||'',ref:stu.ref||'',
-      follow:stu.follow||'',note:stu.note||'',generated:!!stu.generated
-    };
-    return {
-      evaluation_id:stu._apiEvaluationId,version:stu._apiVersion||1,
-      batch:{id:batch.id,date:batch.date,teacher:batch.teacher,fill_date:batch.fillDate},
-      student:{id:stu.id,name:stu.name||'',grade:stu.grade||'',slot:stu.slot||''},payload:payload
-    };
+    return MakerSeedEditorMapping.toDocument(state,state.classList||[]);
   }
   _loadPromoText(){
     try{ var raw=localStorage.getItem('mkseed_diag_promo_v1'); if(raw) return raw; }catch(e){}
@@ -828,6 +828,12 @@ class Component extends DCLogic {
       }
     };
     window.addEventListener('afterprint', this._afterPrintHandler);
+    this._beforeUnloadHandler=function(event){
+      if(self.isApiMode&&self.repository&&self.repository.hasUnsaved()){
+        event.preventDefault(); event.returnValue='';
+      }
+    };
+    window.addEventListener('beforeunload',this._beforeUnloadHandler);
     this._ensureLogos();
     if(this.isApiMode){
       var evaluationId=new URLSearchParams(window.location.search).get('evaluation_id');
@@ -837,7 +843,8 @@ class Component extends DCLogic {
           loaded.classList=self.state.classList; loaded.showClassSettings=false;
           loaded.aiCfg=self.state.aiCfg; loaded.showAiSettings=false; loaded.aiBusyField=null;
           loaded.promoText=self.state.promoText; loaded.showPromoSettings=false;
-          self.setState(loaded);
+          loaded.serverGenerationBusy=false; loaded.generationHistory=[];
+          self.setState(loaded,function(){ self._loadGenerationHistory(); });
         }
       }).catch(function(){ self.setState({status:'记录加载失败，请返回列表重试',statusColor:'#991b1b'}); });
       return;
@@ -861,7 +868,9 @@ class Component extends DCLogic {
   }
   componentWillUnmount(){
     window.removeEventListener('afterprint', this._afterPrintHandler);
+    window.removeEventListener('beforeunload',this._beforeUnloadHandler);
     clearTimeout(this._printFallback);
+    clearTimeout(this._generationPollTimer);
     if(this.repository){ this.repository.flush(); this.repository.dispose(); }
   }
 
@@ -888,6 +897,59 @@ class Component extends DCLogic {
     try{
       localStorage.setItem('mkseed_diag_v3', JSON.stringify({batches:state.batches, activeBatch:state.activeBatch, activeStudent:state.activeStudent}));
     }catch(e){}
+  }
+  _apiRequest(path,options){
+    var opts=Object.assign({credentials:'same-origin'},options||{});
+    opts.headers=Object.assign({'Accept':'application/json'},opts.headers||{});
+    return fetch(path,opts).then(function(response){
+      if(response.status===204) return {};
+      return response.json().then(function(data){
+        if(!response.ok){ var err=new Error((data.error&&data.error.message)||('HTTP '+response.status)); err.status=response.status; err.data=data; throw err; }
+        return data;
+      });
+    });
+  }
+  _loadGenerationHistory(){
+    if(!this.isApiMode) return Promise.resolve([]);
+    var stu=this._curStudent(),self=this;
+    if(!stu||!stu._apiEvaluationId) return Promise.resolve([]);
+    return this._apiRequest('/api/evaluations/'+encodeURIComponent(stu._apiEvaluationId)+'/generations').then(function(items){
+      self.setState({generationHistory:Array.isArray(items)?items:[]});
+      var pending=(items||[]).some(function(item){return item.status==='queued'||item.status==='running';});
+      if(pending){
+        clearTimeout(self._generationPollTimer);
+        self._generationPollTimer=setTimeout(function(){self._loadGenerationHistory();},1500);
+      }
+      return items;
+    }).catch(function(err){
+      if(err.status===401) self.setState({status:'登录已失效，请重新登录',statusColor:'#991b1b'});
+      return [];
+    });
+  }
+  requestServerGeneration(){
+    if(!this.isApiMode||this.state.serverGenerationBusy) return;
+    if(this.repository.isConflicted()){
+      this.setState({status:'记录已被其他老师修改，请重新加载',statusColor:'#991b1b'}); return;
+    }
+    var stu=this._curStudent(),errs=this._validate(stu),self=this;
+    if(errs.length){ this.setState({status:'请先补齐：'+errs.join('、'),statusColor:'#991b1b'}); return; }
+    this.setState({serverGenerationBusy:true,status:'正在保存并提交生成…',statusColor:'#6B7280'});
+    this.repository.flush().then(function(){
+      return self._apiRequest('/api/evaluations/'+encodeURIComponent(stu._apiEvaluationId)+'/generations',{
+        method:'POST',headers:{'X-CSRF-Token':MakerSeedEditorRepository.readCookie(document.cookie,'mkseed_csrf')}
+      });
+    }).then(function(){
+      self._withStudent(function(current){current.generated=true;});
+      self.setState({serverGenerationBusy:false,status:'报告已加入 NAS 生成队列',statusColor:'#15803d'});
+      return self._loadGenerationHistory();
+    }).catch(function(err){
+      self.setState({serverGenerationBusy:false,status:'报告生成提交失败：'+err.message,statusColor:'#991b1b'});
+    });
+  }
+  backToNasList(){
+    if(!this.isApiMode) return;
+    if(this.repository.isConflicted()&&!window.confirm('当前记录存在保存冲突，仍然返回列表？')) return;
+    this.repository.flush().then(function(){window.location.assign('/');});
   }
   _cloneBatches(s){
     return s.batches.map(function(b){
@@ -1621,10 +1683,21 @@ class Component extends DCLogic {
 
     var crossDayText = '检测到上次填写是「'+(batch.date||'未填日期')+'」的批次，是否开始新批次？旧批次会保留在本机，可以随时切回去查看或重新导出。';
     var batchSummary = (batch.date||'未填日期') + (batch.teacher? ' · '+batch.teacher : '');
+    var generationStatusLabels={queued:'等待生成',running:'生成中',completed:'已完成',failed:'生成失败'};
+    var generationHistoryView=(s.generationHistory||[]).map(function(job){
+      var created=(job.created_at||'').replace('T',' ').slice(0,16);
+      var files=(job.artifacts||[]).map(function(file){
+        return {
+          label:(file.variant==='with'?'含内联':'无内联')+' '+String(file.format||'').toUpperCase(),
+          href:'/api/generations/'+encodeURIComponent(job.id)+'/files/'+encodeURIComponent(file.id)
+        };
+      });
+      return {label:created+' · '+(generationStatusLabels[job.status]||job.status)+' · '+job.renderer_version,files:files};
+    });
 
     return {
       isFormMode: s.mode==='form', isReportMode: s.mode==='report',
-      showWorkspaceControls: !this.isApiMode,
+      isApiMode:this.isApiMode,showLocalExportControls:!this.isApiMode,showWorkspaceControls: !this.isApiMode,
       printing: s.printing, showHistory: s.showHistory, showCrossDay: s.showCrossDay, batchEditOpen: s.batchEditOpen,
       status: s.status, statusStyle: 'font-size:13.7px;color:'+(s.statusColor||'#6B7280')+';text-align:center;',
       crossDayText: crossDayText, batchSummary: batchSummary,
@@ -1672,6 +1745,11 @@ class Component extends DCLogic {
       generateLabel: stu.generated ? '更新报告' : '一键生成报告',
       generateReport:function(){ self.generateReport(); },
       backToForm:function(){ self.backToForm(); },
+      backToNasList:function(){ self.backToNasList(); },
+      requestServerGeneration:function(){ self.requestServerGeneration(); },
+      serverGenerationBusy:!!s.serverGenerationBusy,
+      serverGenerationLabel:s.serverGenerationBusy?'正在提交…':'生成并保存到 NAS',
+      generationHistoryEmpty:generationHistoryView.length===0,generationHistoryView:generationHistoryView,
       exportPDF:function(){ self.exportPDF(); },
       exportImage:function(){ self.exportImage(); },
       pageRef: this.pageRef,

@@ -50,6 +50,7 @@ try {
         '/shared/report-filename.js',
         '/shared/runtime-config.js',
         '/shared/editor-repository.js',
+        '/shared/editor-mapping.js',
         '/assets/logo-lockup.png',
         '/assets/logo-mark.png'
     )

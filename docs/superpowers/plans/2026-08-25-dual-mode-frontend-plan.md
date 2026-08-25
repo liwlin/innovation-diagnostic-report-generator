@@ -232,27 +232,27 @@ Record same-origin, security-header, text-escaping, keyboard navigation, and sea
 - Consumes: editor document API, generation API, repository status events, and current DC methods.
 - Produces: one-record editor lifecycle, visible save state, conflict recovery, return-to-list, and generation history/download controls.
 
-- [ ] **Step 1: Write failing integration-state tests**
+- [x] **Step 1: Write failing integration-state tests**
 
 Test `EditorDocument -> current batch/student state` mapping and reverse mapping without dropping any current fields: `mods`, `customMods`, `chart`, five `rates`, three `skills`, `obs1`, `obs2`, direction/custom direction, reason, class selection, internal fields, and `generated`.
 
 Test that a 409 freezes saves and renders both the local unsaved timestamp and server current version, while `重新加载服务器版本` performs a new GET before editing resumes.
 
-- [ ] **Step 2: Run the Node test and verify mapping is absent**
+- [x] **Step 2: Run the Node test and verify mapping is absent**
 
 Run: `node --test tests/js/editor-integration.test.js`
 
 Expected: missing exports or assertion failures.
 
-- [ ] **Step 3: Implement lossless mappings and lifecycle**
+- [x] **Step 3: Implement lossless mappings and lifecycle**
 
 The API editor displays a loading state until GET succeeds, blocks form actions on 401/404, and calls `flush()` before navigation or report generation. It never marks `generated=true` until the server accepts a generation request. Browser unload warning appears only while a save is queued, in flight, failed, or conflicted.
 
-- [ ] **Step 4: Add generation history and downloads**
+- [x] **Step 4: Add generation history and downloads**
 
 The editor lists generation ID, time, actor, status, renderer version, and four artifact links. Failed jobs show sanitized error and an authenticated retry action. Existing Pages buttons continue browser print/image behavior; NAS mode replaces them with server generation actions.
 
-- [ ] **Step 5: Run integration and Pages tests**
+- [x] **Step 5: Run integration and Pages tests**
 
 Run:
 
@@ -263,7 +263,7 @@ pwsh -NoProfile -File tests/verify-static-site.ps1
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit the API-backed editor**
+- [x] **Step 6: Commit the API-backed editor**
 
 Record field-mapping coverage, save-state behavior, conflict freeze/reload, server-generation boundary, and Pages regression.
 

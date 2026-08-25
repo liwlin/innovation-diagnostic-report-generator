@@ -84,6 +84,7 @@ test('api mode debounces to one versioned PUT and never stores business data loc
 
   repository.scheduleSave(editorDocument(1, 'first'));
   repository.scheduleSave(editorDocument(1, 'latest'));
+  assert.equal(repository.hasUnsaved(), true);
   await scheduled();
   await repository.flush();
 
@@ -98,6 +99,7 @@ test('api mode debounces to one versioned PUT and never stores business data loc
   });
   assert.equal(storageCalls.length, 0);
   assert.equal(repository.current().version, 2);
+  assert.equal(repository.hasUnsaved(), false);
   assert.ok(statuses.includes('saving'));
   assert.equal(statuses.at(-1), 'saved');
 });
@@ -133,6 +135,7 @@ test('api conflict freezes future autosaves until a reload', async () => {
 
   assert.equal(fetchCalls.length, 1);
   assert.equal(repository.isConflicted(), true);
+  assert.equal(repository.hasUnsaved(), true);
   assert.equal(statuses.at(-1), 'conflict');
 });
 
