@@ -6,6 +6,8 @@
 <title>科创体验报告 · 生成器</title>
 <script src="./support.js"></script>
 <script src="./shared/report-filename.js"></script>
+<script src="./shared/runtime-config.js"></script>
+<script src="./shared/editor-repository.js"></script>
 </head>
 <body>
 <x-dc>
@@ -134,8 +136,10 @@ input,select,textarea,button{font-family:inherit;}
         <span style="color:#6B7280;margin-left:6px;">{{ batchSummary }}</span>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
-        <button onClick="{{ toggleBatchEdit }}" style="font-size:12px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">编辑</button>
-        <button onClick="{{ toggleHistory }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">历史批次</button>
+        <sc-if value="{{ showWorkspaceControls }}">
+          <button onClick="{{ toggleBatchEdit }}" style="font-size:12px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">编辑</button>
+          <button onClick="{{ toggleHistory }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">历史批次</button>
+        </sc-if>
         <button onClick="{{ toggleAiSettings }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">AI设置</button>
       </div>
     </div>
@@ -160,12 +164,14 @@ input,select,textarea,button{font-family:inherit;}
     </sc-if>
   </div>
 
-  <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;-webkit-overflow-scrolling:touch;">
-    <sc-for list="{{ studentsView }}" as="stu" hint-placeholder-count="1">
-      <div onClick="{{ stu.select }}" style="{{ stu.tabStyle }}">{{ stu.label }}<sc-if value="{{ stu.done }}"> ✓</sc-if><sc-if value="{{ stu.canDelete }}"><span onClick="{{ stu.remove }}" style="margin-left:7px;opacity:.65;">×</span></sc-if></div>
-    </sc-for>
-    <div onClick="{{ addStudent }}" style="flex-shrink:0;width:40px;height:40px;border-radius:50%;border:1.5px dashed #A9BFF3;color:#0F3ED2;font-size:18px;font-weight:700;display:grid;place-items:center;cursor:pointer;">＋</div>
-  </div>
+  <sc-if value="{{ showWorkspaceControls }}">
+    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;-webkit-overflow-scrolling:touch;">
+      <sc-for list="{{ studentsView }}" as="stu" hint-placeholder-count="1">
+        <div onClick="{{ stu.select }}" style="{{ stu.tabStyle }}">{{ stu.label }}<sc-if value="{{ stu.done }}"> ✓</sc-if><sc-if value="{{ stu.canDelete }}"><span onClick="{{ stu.remove }}" style="margin-left:7px;opacity:.65;">×</span></sc-if></div>
+      </sc-for>
+      <div onClick="{{ addStudent }}" style="flex-shrink:0;width:40px;height:40px;border-radius:50%;border:1.5px dashed #A9BFF3;color:#0F3ED2;font-size:18px;font-weight:700;display:grid;place-items:center;cursor:pointer;">＋</div>
+    </div>
+  </sc-if>
 
   <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -652,6 +658,7 @@ var CLASSES = [
   ["AI创意应用2.0 V1/V2","周六 16:15-17:45 · 229室"],
   ["车辆模型竞赛班","周日 10:15-11:45 · 创客1室"]
 ];
+var RUNTIME_CONFIG = MakerSeedRuntime.getConfig(window.location, window.__MKSEED_RUNTIME__);
 
 function pad2(n){ return n<10 ? '0'+n : ''+n; }
 function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
@@ -708,7 +715,9 @@ function radarGeometry(rates){
 class Component extends DCLogic {
   constructor(props){
     super(props);
-    var loaded = this._load();
+    this.runtimeConfig = RUNTIME_CONFIG;
+    this.isApiMode = this.runtimeConfig.storageMode === 'api';
+    var loaded = this.isApiMode ? null : this._load();
     this.state = loaded || {
       batches:[emptyBatch(props.defaultChartType)],
       activeBatch:0, activeStudent:0, mode:'form', printing:false,
@@ -723,7 +732,59 @@ class Component extends DCLogic {
     this.state.aiBusyField = null;
     this.state.promoText = this._loadPromoText();
     this.state.showPromoSettings = false;
+    if(this.isApiMode){ this.state.status='正在加载记录…'; this.state.statusColor='#6B7280'; }
+    var self=this;
+    this.repository = MakerSeedEditorRepository.create({
+      config:this.runtimeConfig,
+      storage:window.localStorage,
+      onStatus:function(update){ self._handleRepositoryStatus(update); }
+    });
     this.pageRef = React.createRef();
+  }
+  _handleRepositoryStatus(update){
+    if(!this.isApiMode) return;
+    var map={
+      loading:['正在加载记录…','#6B7280'], saving:['正在保存…','#6B7280'], saved:['已保存','#15803d'],
+      failed:['保存失败，请检查网络后重试','#991b1b'], conflict:['记录已被其他老师修改，请重新加载','#991b1b'],
+      signed_out:['登录已失效，请重新登录','#991b1b']
+    };
+    var value=map[update.state]||['','#6B7280'];
+    this.setState({status:value[0],statusColor:value[1]});
+  }
+  _apiDocumentToState(doc){
+    var payload=Object.assign({},doc.payload||{});
+    var stu=Object.assign(emptyStudent(null,this.props.defaultChartType),payload,doc.student||{});
+    stu._apiEvaluationId=doc.evaluation_id; stu._apiVersion=doc.version;
+    if(!Array.isArray(stu.mods)) stu.mods=[];
+    if(!Array.isArray(stu.customMods)) stu.customMods=[];
+    if(!Array.isArray(stu.rates)||stu.rates.length!==5) stu.rates=[0,0,0,0,0];
+    if(!Array.isArray(stu.skills)||stu.skills.length!==3) stu.skills=[{m:'',p:'',r:0},{m:'',p:'',r:0},{m:'',p:'',r:0}];
+    var batch={
+      id:(doc.batch||{}).id,date:(doc.batch||{}).date||'',teacher:(doc.batch||{}).teacher||'',
+      fillDate:(doc.batch||{}).fill_date||todayISO(),_day:todayKey(),students:[stu]
+    };
+    return {
+      batches:[batch],activeBatch:0,activeStudent:0,mode:'form',printing:false,showHistory:false,
+      showCrossDay:false,batchEditOpen:false,status:'已保存',statusColor:'#15803d',exportBusy:false,
+      printIncludeInternal:false,addingMod:false,newModDraft:''
+    };
+  }
+  _apiStateToDocument(state){
+    var batch=state.batches[state.activeBatch],stu=batch.students[state.activeStudent];
+    var classInfo=state.classList[Number(stu.classIndex)];
+    var payload={
+      schema_version:1,mods:(stu.mods||[]).slice(),customMods:(stu.customMods||[]).slice(),chart:stu.chart,
+      rates:(stu.rates||[]).slice(),skills:(stu.skills||[]).map(function(x){return Object.assign({},x);}),
+      obs1:stu.obs1||'',obs2:stu.obs2||'',dir:Number(stu.dir),reason:stu.reason||'',classIndex:stu.classIndex||'',
+      recommended_class:classInfo?classInfo.name:(stu.recommended_class||''),dirCustom:Object.assign({name:'',desc:''},stu.dirCustom||{}),
+      attendp:stu.attendp||'',talk:stu.talk||'',intent:stu.intent||'',why:stu.why||'',ref:stu.ref||'',
+      follow:stu.follow||'',note:stu.note||'',generated:!!stu.generated
+    };
+    return {
+      evaluation_id:stu._apiEvaluationId,version:stu._apiVersion||1,
+      batch:{id:batch.id,date:batch.date,teacher:batch.teacher,fill_date:batch.fillDate},
+      student:{id:stu.id,name:stu.name||'',grade:stu.grade||'',slot:stu.slot||''},payload:payload
+    };
   }
   _loadPromoText(){
     try{ var raw=localStorage.getItem('mkseed_diag_promo_v1'); if(raw) return raw; }catch(e){}
@@ -768,6 +829,19 @@ class Component extends DCLogic {
     };
     window.addEventListener('afterprint', this._afterPrintHandler);
     this._ensureLogos();
+    if(this.isApiMode){
+      var evaluationId=new URLSearchParams(window.location.search).get('evaluation_id');
+      this.repository.load({evaluationId:evaluationId}).then(function(doc){
+        if(doc){
+          var loaded=self._apiDocumentToState(doc);
+          loaded.classList=self.state.classList; loaded.showClassSettings=false;
+          loaded.aiCfg=self.state.aiCfg; loaded.showAiSettings=false; loaded.aiBusyField=null;
+          loaded.promoText=self.state.promoText; loaded.showPromoSettings=false;
+          self.setState(loaded);
+        }
+      }).catch(function(){ self.setState({status:'记录加载失败，请返回列表重试',statusColor:'#991b1b'}); });
+      return;
+    }
     var s=this.state, b=s.batches[s.activeBatch];
     if(b && b._day && b._day!==todayKey() && b.students.some(function(x){return x.name.trim();})){
       this.setState({showCrossDay:true});
@@ -788,6 +862,7 @@ class Component extends DCLogic {
   componentWillUnmount(){
     window.removeEventListener('afterprint', this._afterPrintHandler);
     clearTimeout(this._printFallback);
+    if(this.repository){ this.repository.flush(); this.repository.dispose(); }
   }
 
   _load(){
@@ -805,6 +880,11 @@ class Component extends DCLogic {
     }catch(e){ return null; }
   }
   _persist(state){
+    if(this.isApiMode){
+      var stu=state.batches[state.activeBatch]&&state.batches[state.activeBatch].students[state.activeStudent];
+      if(stu&&stu._apiEvaluationId) this.repository.scheduleSave(this._apiStateToDocument(state));
+      return;
+    }
     try{
       localStorage.setItem('mkseed_diag_v3', JSON.stringify({batches:state.batches, activeBatch:state.activeBatch, activeStudent:state.activeStudent}));
     }catch(e){}
@@ -1544,6 +1624,7 @@ class Component extends DCLogic {
 
     return {
       isFormMode: s.mode==='form', isReportMode: s.mode==='report',
+      showWorkspaceControls: !this.isApiMode,
       printing: s.printing, showHistory: s.showHistory, showCrossDay: s.showCrossDay, batchEditOpen: s.batchEditOpen,
       status: s.status, statusStyle: 'font-size:13.7px;color:'+(s.statusColor||'#6B7280')+';text-align:center;',
       crossDayText: crossDayText, batchSummary: batchSummary,

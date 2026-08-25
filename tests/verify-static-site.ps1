@@ -48,6 +48,8 @@ try {
         '/support.js',
         '/doc-page.js',
         '/shared/report-filename.js',
+        '/shared/runtime-config.js',
+        '/shared/editor-repository.js',
         '/assets/logo-lockup.png',
         '/assets/logo-mark.png'
     )

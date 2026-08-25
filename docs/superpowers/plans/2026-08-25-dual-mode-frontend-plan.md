@@ -102,7 +102,7 @@ api.confirmEmergencyImport(file, sha256)
 - Consumes: browser location, `window.__MKSEED_RUNTIME__`, existing localStorage keys, and record API.
 - Produces: `MakerSeedRuntime` and `MakerSeedEditorRepository` globals with CommonJS exports for Node tests.
 
-- [ ] **Step 1: Write failing runtime-config tests**
+- [x] **Step 1: Write failing runtime-config tests**
 
 ```javascript
 test('Pages defaults to local mode without an injected config', () => {
@@ -114,27 +114,27 @@ test('api mode requires same-origin empty apiBaseUrl', () => {
 });
 ```
 
-- [ ] **Step 2: Write failing repository behavior tests**
+- [x] **Step 2: Write failing repository behavior tests**
 
 Test that local mode reads/writes `mkseed_diag_v3`, API mode never calls `storage.setItem` with business data, API saves debounce to one PUT, `flush()` waits for the response, successful save adopts the returned version, 401 emits `signed_out`, 409 emits `conflict` and disables new saves, and disposal cancels pending timers.
 
-- [ ] **Step 3: Run Node tests and verify modules are missing**
+- [x] **Step 3: Run Node tests and verify modules are missing**
 
 Run: `node --test tests/js/runtime-config.test.js tests/js/editor-repository.test.js`
 
 Expected: missing module failures.
 
-- [ ] **Step 4: Implement UMD modules without a bundler**
+- [x] **Step 4: Implement UMD modules without a bundler**
 
 `runtime-config.js` defaults to local mode. API mode can only be injected by the NAS response and requires same-origin relative API URLs. `editor-repository.js` keeps the current synchronous local behavior and an API implementation with a 700 ms debounce, one in-flight request, queued latest snapshot, CSRF header, and terminal conflict state.
 
-- [ ] **Step 5: Add a narrow editor integration seam**
+- [x] **Step 5: Add a narrow editor integration seam**
 
 Load both scripts before the DC component script. In local mode, `_load()` and `_persist()` continue current behavior. In API mode, constructor state starts in `loading`; `componentDidMount` loads `evaluation_id` from a UUID-only query parameter; `_persist` sends the current student/evaluation document through the repository. The history and multi-batch controls are hidden in API editor mode because the NAS shell owns those lists.
 
 Status callbacks map exactly to Chinese UI states: `正在保存…`, `已保存`, `保存失败，请检查网络后重试`, `记录已被其他老师修改，请重新加载`, and `登录已失效，请重新登录`.
 
-- [ ] **Step 6: Run Node and Pages regression tests**
+- [x] **Step 6: Run Node and Pages regression tests**
 
 Run:
 
@@ -145,7 +145,7 @@ pwsh -NoProfile -File tests/verify-static-site.ps1
 
 Expected: tests pass and Pages static runtime files remain reachable.
 
-- [ ] **Step 7: Commit the dual-mode persistence boundary**
+- [x] **Step 7: Commit the dual-mode persistence boundary**
 
 Record local-mode compatibility, no API-mode business localStorage, debounce, CSRF, and 409 behavior.
 
