@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
+from contextlib import ExitStack
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -9,6 +12,13 @@ from fastapi.testclient import TestClient
 SERVER_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = SERVER_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
+
+
+@dataclass(frozen=True)
+class AuthenticatedClient:
+    client: TestClient
+    user: object
+    csrf: str
 
 
 @pytest.fixture
@@ -84,3 +94,40 @@ def admin(db_session):
     db_session.commit()
     db_session.refresh(user)
     return user
+
+
+@pytest.fixture
+def authenticated_client_factory(app) -> Callable[..., AuthenticatedClient]:
+    from makerseed_app.models import User
+    from makerseed_app.security.passwords import hash_password
+
+    stack = ExitStack()
+    sequence = 0
+
+    def create(*, username: str | None = None, role: str = "teacher") -> AuthenticatedClient:
+        nonlocal sequence
+        sequence += 1
+        actual_username = username or f"teacher{sequence}"
+        password = f"fixture password {sequence} with sufficient length"
+        with app.state.session_factory() as session:
+            user = User(
+                username=actual_username,
+                display_name=f"测试老师{sequence}",
+                role=role,
+                password_hash=hash_password(password),
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            session.expunge(user)
+        test_client = stack.enter_context(TestClient(app))
+        response = test_client.post(
+            "/api/auth/login", json={"username": actual_username, "password": password}
+        )
+        assert response.status_code == 200
+        csrf = test_client.cookies.get("mkseed_csrf")
+        assert csrf
+        return AuthenticatedClient(test_client, user, csrf)
+
+    yield create
+    stack.close()

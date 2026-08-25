@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+def default_payload(**changes: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": 1,
+        "mods": [],
+        "customMods": [],
+        "chart": "radar",
+        "rates": [0, 0, 0, 0, 0],
+        "skills": [
+            {"m": "", "p": "", "r": 0},
+            {"m": "", "p": "", "r": 0},
+            {"m": "", "p": "", "r": 0},
+        ],
+        "obs1": "",
+        "obs2": "",
+        "dir": -1,
+        "reason": "",
+        "classIndex": "",
+        "recommended_class": "",
+        "dirCustom": {"name": "", "desc": ""},
+        "attendp": "是",
+        "talk": "已完成",
+        "intent": "高",
+        "why": "",
+        "ref": "",
+        "follow": "",
+        "note": "",
+        "generated": False,
+    }
+    payload.update(changes)
+    return payload
+
+
+def create_batch(identity, *, name: str = "批次1", event_date: str = "2026-08-25") -> dict:
+    response = identity.client.post(
+        "/api/batches",
+        headers={"X-CSRF-Token": identity.csrf},
+        json={
+            "display_name": name,
+            "event_date": event_date,
+            "date_label": "8月25日",
+            "teacher_label": "李老师",
+            "fill_date": event_date,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def create_evaluation(
+    identity,
+    *,
+    batch: dict | None = None,
+    name: str = "张三",
+    grade: str = "三年级",
+    recommended_class: str = "头脑风暴1.0 V1",
+) -> dict:
+    actual_batch = batch or create_batch(identity)
+    response = identity.client.post(
+        f"/api/batches/{actual_batch['id']}/evaluations",
+        headers={"X-CSRF-Token": identity.csrf},
+        json={
+            "student": {"name": name, "grade": grade, "slot": "批次1 · 上午场"},
+            "payload": default_payload(recommended_class=recommended_class),
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()

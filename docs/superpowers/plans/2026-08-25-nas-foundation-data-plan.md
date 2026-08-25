@@ -345,7 +345,7 @@ Stage only the auth schema, security modules, auth route, audit service, and aut
 - Consumes: authenticated users, database sessions, models, and `write_audit_event`.
 - Produces: list/create/editor/update APIs and `update_evaluation(db, evaluation_id, expected_version, update, actor)`.
 
-- [ ] **Step 1: Write failing shared-access and search tests**
+- [x] **Step 1: Write failing shared-access and search tests**
 
 ```python
 def test_teacher_can_read_and_update_another_teachers_record(client_for_teacher_b, evaluation_by_teacher_a, csrf_b):
@@ -365,7 +365,7 @@ def test_partial_chinese_name_search(client, evaluation_named_zhang_san):
     assert [row["student_name"] for row in response.json()["items"]] == ["张三"]
 ```
 
-- [ ] **Step 2: Write the stale-version test**
+- [x] **Step 2: Write the stale-version test**
 
 ```python
 def test_stale_update_returns_409_and_keeps_newer_data(client_a, client_b, evaluation, csrf_a, csrf_b):
@@ -379,13 +379,13 @@ def test_stale_update_returns_409_and_keeps_newer_data(client_a, client_b, evalu
     assert response.json()["error"]["code"] == "version_conflict"
 ```
 
-- [ ] **Step 3: Run focused tests and confirm routes are absent**
+- [x] **Step 3: Run focused tests and confirm routes are absent**
 
 Run: `uv run --project server pytest server/tests/test_records.py server/tests/test_search.py server/tests/test_conflicts.py -q`
 
 Expected: 404/import failures.
 
-- [ ] **Step 4: Implement schemas and version-qualified writes**
+- [x] **Step 4: Implement schemas and version-qualified writes**
 
 Validate `payload.schema_version == 1`, exactly five rates in `0..5`, three skill slots, bounded text lengths, and required name. Perform update as one transaction that:
 
@@ -399,11 +399,11 @@ Validate `payload.schema_version == 1`, exactly five rates in `0..5`, three skil
 
 Map SQLAlchemy stale-row detection to `ApiError("version_conflict", ..., 409)` and return the current server version in `details.current_version`.
 
-- [ ] **Step 5: Implement indexed list filters and stable pagination**
+- [x] **Step 5: Implement indexed list filters and stable pagination**
 
 Support `q`, `date_from`, `date_to`, `batch_id`, `grade`, `recommended_class`, `created_by`, `generation_status`, `trashed`, `limit<=100`, and opaque `cursor`. Sort by `updated_at DESC, id DESC` to avoid duplicate/omitted rows between pages.
 
-- [ ] **Step 6: Run record tests and static checks**
+- [x] **Step 6: Run record tests and static checks**
 
 Run:
 
@@ -414,7 +414,7 @@ uv run --project server ruff check server/src/makerseed_app/schemas/records.py s
 
 Expected: all commands pass.
 
-- [ ] **Step 7: Commit centralized records**
+- [x] **Step 7: Commit centralized records**
 
 Stage the three implementation modules and three test files. The commit must record shared-teacher access and 409 conflict evidence.
 
