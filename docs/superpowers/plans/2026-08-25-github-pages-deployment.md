@@ -32,21 +32,21 @@
 - Consumes: the existing `.dc.html`, `support.js`, `doc-page.js`, and `assets/` files.
 - Produces: a root `/index.html` entry route and a repeatable static-site verifier.
 
-- [ ] **Step 1: Write the failing static-site test**
+- [x] **Step 1: Write the failing static-site test**
 
   The test asserts that `index.html` exists, links to the source page, all required runtime files exist, and excluded local-only paths are covered by `.gitignore`.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
   Run: `pwsh -NoProfile -File tests/verify-static-site.ps1`
 
   Expected: FAIL because `index.html` and `.gitignore` do not exist yet.
 
-- [ ] **Step 3: Add the minimal entry and ignore rules**
+- [x] **Step 3: Add the minimal entry and ignore rules**
 
   Create a standards-based redirect page and ignore only the three confirmed local-only paths. Add a browser title to the source page.
 
-- [ ] **Step 4: Run the test and local browser smoke test**
+- [x] **Step 4: Run the test and local browser smoke test**
 
   Run: `pwsh -NoProfile -File tests/verify-static-site.ps1`
 
