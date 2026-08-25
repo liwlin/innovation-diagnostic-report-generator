@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;padding:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased;}
+input,select,textarea,button{font-family:inherit;}
+</style>
+<script src="./doc-page.js"></script>
+</helmet>
+
+<div style="min-height:100vh;background:#EEF1F6;color:#0A0A0A;line-height:1.5;">
+
+<sc-if value="{{ showCrossDay }}">
+  <div style="position:fixed;inset:0;background:rgba(10,10,10,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:200;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:16px;padding:20px;max-width:340px;width:100%;box-sizing:border-box;">
+      <div style="font-size:16.7px;font-weight:800;margin-bottom:8px;">开始新批次？</div>
+      <div style="font-size:14.7px;color:#262626;line-height:1.6;margin-bottom:16px;">{{ crossDayText }}</div>
+      <div style="display:flex;gap:10px;">
+        <button onClick="{{ dismissCrossDay }}" style="flex:1;padding:12px;border-radius:10px;border:1.5px solid #D3D9E5;background:#fff;font-size:15.7px;font-weight:700;color:#262626;appearance:none;-webkit-appearance:none;">继续用旧批次</button>
+        <button onClick="{{ startNewBatch }}" style="flex:1;padding:12px;border-radius:10px;border:none;background:#0F3ED2;color:#fff;font-size:15.7px;font-weight:700;appearance:none;-webkit-appearance:none;">开始新批次</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ showHistory }}">
+  <div style="position:fixed;inset:0;background:rgba(10,10,10,.45);display:flex;align-items:flex-end;justify-content:center;z-index:200;">
+    <div style="background:#fff;border-radius:18px 18px 0 0;padding:18px;max-width:640px;width:100%;max-height:70vh;overflow-y:auto;box-sizing:border-box;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:16.7px;font-weight:800;white-space:nowrap;flex-shrink:0;">历史批次</div>
+        <button onClick="{{ toggleHistory }}" style="border:none;background:none;font-size:22px;color:#6B7280;padding:2px 8px;line-height:1;appearance:none;-webkit-appearance:none;">×</button>
+      </div>
+      <sc-for list="{{ historyView }}" as="h" hint-placeholder-count="1">
+        <div onClick="{{ h.select }}" style="{{ h.rowStyle }}display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <div style="font-size:15.2px;font-weight:700;flex:1;min-width:0;">{{ h.label }}</div>
+          <sc-if value="{{ h.canDelete }}">
+            <button onClick="{{ h.remove }}" style="flex-shrink:0;background:#fff;border:1px solid #fca5a5;color:#991b1b;font-size:13.2px;padding:6px 10px;border-radius:8px;appearance:none;-webkit-appearance:none;">删除</button>
+          </sc-if>
+        </div>
+      </sc-for>
+      <button onClick="{{ startNewBatch }}" style="width:100%;padding:12px;border-radius:10px;border:1.5px dashed #A9BFF3;background:#EEF3FF;color:#0F3ED2;font-size:15.2px;font-weight:700;margin-top:6px;appearance:none;-webkit-appearance:none;">＋ 开始新批次</button>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ showClassSettings }}">
+  <div style="position:fixed;inset:0;background:rgba(10,10,10,.45);display:flex;align-items:flex-end;justify-content:center;z-index:200;">
+    <div style="background:#fff;border-radius:18px 18px 0 0;padding:18px;max-width:640px;width:100%;max-height:80vh;overflow-y:auto;box-sizing:border-box;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:16.7px;font-weight:800;">班级列表管理</div>
+        <button onClick="{{ toggleClassSettings }}" style="border:none;background:none;font-size:22px;color:#6B7280;padding:2px 8px;line-height:1;appearance:none;-webkit-appearance:none;">×</button>
+      </div>
+      <div style="font-size:13.2px;color:#6B7280;margin-bottom:12px;line-height:1.6;">课程随季度调整时，在这里增删改班级名称与上课时间，改动立即生效并保存在本机。</div>
+      <sc-for list="{{ classListView }}" as="c" hint-placeholder-count="4">
+        <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
+          <input type="text" value="{{ c.name }}" onChange="{{ c.onName }}" placeholder="班级名称" style="flex:1;min-width:0;font-size:15.7px;padding:9px 10px;border:1.5px solid #D3D9E5;border-radius:8px;box-sizing:border-box;"/>
+          <input type="text" value="{{ c.time }}" onChange="{{ c.onTime }}" placeholder="上课时间" style="flex:1;min-width:0;font-size:15.7px;padding:9px 10px;border:1.5px solid #D3D9E5;border-radius:8px;box-sizing:border-box;"/>
+          <button onClick="{{ c.remove }}" style="flex-shrink:0;background:none;border:none;color:#991b1b;font-size:18px;padding:4px 8px;appearance:none;-webkit-appearance:none;">×</button>
+        </div>
+      </sc-for>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onClick="{{ addClassRow }}" style="flex:1;padding:11px;border-radius:10px;border:1.5px dashed #A9BFF3;background:#EEF3FF;color:#0F3ED2;font-size:14.7px;font-weight:700;appearance:none;-webkit-appearance:none;">＋ 添加班级</button>
+        <button onClick="{{ resetClassList }}" style="flex-shrink:0;padding:11px 14px;border-radius:10px;border:1.5px solid #D3D9E5;background:#fff;color:#262626;font-size:14.7px;font-weight:700;appearance:none;-webkit-appearance:none;">恢复默认</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ showAiSettings }}">
+  <div style="position:fixed;inset:0;background:rgba(10,10,10,.45);display:flex;align-items:flex-end;justify-content:center;z-index:200;">
+    <div style="background:#fff;border-radius:18px 18px 0 0;padding:18px;max-width:640px;width:100%;max-height:80vh;overflow-y:auto;box-sizing:border-box;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:16.7px;font-weight:800;">AI 润色设置</div>
+        <button onClick="{{ toggleAiSettings }}" style="border:none;background:none;font-size:22px;color:#6B7280;padding:2px 8px;line-height:1;appearance:none;-webkit-appearance:none;">×</button>
+      </div>
+      <div style="font-size:13.2px;color:#6B7280;margin-bottom:12px;line-height:1.6;">配置后可在观察记录、推荐理由、技能点旁一键润色文字。API Key 只保存在本设备浏览器中，直接从本机发往你填写的接口地址，不经过工坊服务器。默认地址适配 DeepSeek，兼容 OpenAI 格式的接口也可填入。若浏览器跨域限制导致调用失败，需请技术支持配置代理转发。</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div><label style="display:block;font-size:13.2px;color:#6B7280;margin-bottom:4px;">接口地址（Base URL）</label>
+          <input type="text" value="{{ aiBaseUrl }}" onChange="{{ onAiBaseUrl }}" placeholder="https://api.deepseek.com" style="width:100%;font-size:15.7px;padding:10px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/></div>
+        <div><label style="display:block;font-size:13.2px;color:#6B7280;margin-bottom:4px;">API Key</label>
+          <input type="password" value="{{ aiApiKey }}" onChange="{{ onAiApiKey }}" placeholder="sk-..." style="width:100%;font-size:15.7px;padding:10px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/></div>
+        <div><label style="display:block;font-size:13.2px;color:#6B7280;margin-bottom:4px;">模型名称</label>
+          <input type="text" value="{{ aiModel }}" onChange="{{ onAiModel }}" placeholder="deepseek-chat" style="width:100%;font-size:15.7px;padding:10px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/></div>
+      </div>
+      <button onClick="{{ toggleAiSettings }}" style="width:100%;margin-top:14px;padding:12px;border-radius:10px;border:none;background:#0F3ED2;color:#fff;font-size:15.7px;font-weight:700;appearance:none;-webkit-appearance:none;">完成</button>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ showPromoSettings }}">
+  <div style="position:fixed;inset:0;background:rgba(10,10,10,.45);display:flex;align-items:flex-end;justify-content:center;z-index:200;">
+    <div style="background:#fff;border-radius:18px 18px 0 0;padding:18px;max-width:640px;width:100%;max-height:80vh;overflow-y:auto;box-sizing:border-box;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:16.7px;font-weight:800;">秋季班优惠文案</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span onClick="{{ polishPromo }}" style="font-size:13.2px;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;">{{ promoPolishLabel }}</span>
+          <button onClick="{{ togglePromoSettings }}" style="border:none;background:none;font-size:22px;color:#6B7280;padding:2px 8px;line-height:1;appearance:none;-webkit-appearance:none;">×</button>
+        </div>
+      </div>
+      <div style="font-size:13.2px;color:#6B7280;margin-bottom:12px;line-height:1.6;">显示在报告底部，每季度优惠、有效期、联系方式变化时可在此修改，保存在本机，立即生效。</div>
+      <textarea value="{{ promoText }}" onChange="{{ onPromoText }}" style-focus="outline:none;border-color:#2456E8;" style="width:100%;min-height:140px;font-size:15.7px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;line-height:1.6;resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onClick="{{ togglePromoSettings }}" style="flex:1;padding:12px;border-radius:10px;border:none;background:#0F3ED2;color:#fff;font-size:15.7px;font-weight:700;appearance:none;-webkit-appearance:none;">完成</button>
+        <button onClick="{{ resetPromoText }}" style="flex-shrink:0;padding:12px 14px;border-radius:10px;border:1.5px solid #D3D9E5;background:#fff;color:#262626;font-size:15.7px;font-weight:700;appearance:none;-webkit-appearance:none;">恢复默认</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isFormMode }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="填写" style="max-width:640px;margin:0 auto;padding:16px 14px 118px;box-sizing:border-box;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2.5px solid #0F3ED2;padding-bottom:10px;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
+    <img src="assets/logo-lockup.png" alt="MAKERSEED" style="height:26px;width:auto;object-fit:contain;"/>
+    <div style="text-align:right;">
+      <div style="font-size:16.7px;font-weight:800;color:#0A0A0A;">科创体验报告 · 生成器</div>
+      <div style="font-size:12.2px;color:#6B7280;margin-top:2px;">课后填写 → 一键生成 A4 报告 · 当面交付家长</div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:12px 14px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="font-size:14.7px;color:#262626;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">
+        <b style="color:#0F3ED2;">本批信息</b>
+        <span style="color:#6B7280;margin-left:6px;">{{ batchSummary }}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+        <button onClick="{{ toggleBatchEdit }}" style="font-size:12px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">编辑</button>
+        <button onClick="{{ toggleHistory }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">历史批次</button>
+        <button onClick="{{ toggleAiSettings }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">AI设置</button>
+      </div>
+    </div>
+    <sc-if value="{{ batchEditOpen }}">
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:11px;padding-top:11px;border-top:1px dashed #E7EBF3;">
+        <div><label style="display:block;font-size:13.2px;color:#6B7280;margin-bottom:4px;">体验日期</label>
+          <input type="text" value="{{ batchDate }}" onChange="{{ onBatchDate }}" placeholder="8月24日 / 8月27日" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/></div>
+        <div><label style="display:block;font-size:13.2px;color:#6B7280;margin-bottom:4px;">授课教师</label>
+          <select value="{{ batchTeacher }}" onChange="{{ onBatchTeacher }}" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;">
+            <option value="">请选择</option>
+            <option>肖老师</option><option>张老师</option><option>谭老师</option><option>林老师</option><option>李伟林</option>
+          </select></div>
+        <div><label style="display:block;font-size:13.2px;color:#6B7280;margin-bottom:4px;">填表日期</label>
+          <input type="date" value="{{ batchFillDate }}" onChange="{{ onBatchFillDate }}" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ canBatchExport }}">
+      <div style="display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed #E7EBF3;">
+        <button onClick="{{ exportAllImages }}" style="flex:1;font-size:14.2px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:9px 8px;appearance:none;-webkit-appearance:none;">批量存图片（{{ batchStudentCount }}人）</button>
+        <button onClick="{{ startBatchPrint }}" style="flex:1;font-size:14.2px;font-weight:700;color:#fff;background:#0F3ED2;border:none;border-radius:8px;padding:9px 8px;appearance:none;-webkit-appearance:none;">批量打印/存PDF</button>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;-webkit-overflow-scrolling:touch;">
+    <sc-for list="{{ studentsView }}" as="stu" hint-placeholder-count="1">
+      <div onClick="{{ stu.select }}" style="{{ stu.tabStyle }}">{{ stu.label }}<sc-if value="{{ stu.done }}"> ✓</sc-if><sc-if value="{{ stu.canDelete }}"><span onClick="{{ stu.remove }}" style="margin-left:7px;opacity:.65;">×</span></sc-if></div>
+    </sc-for>
+    <div onClick="{{ addStudent }}" style="flex-shrink:0;width:40px;height:40px;border-radius:50%;border:1.5px dashed #A9BFF3;color:#0F3ED2;font-size:18px;font-weight:700;display:grid;place-items:center;cursor:pointer;">＋</div>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="background:#0F3ED2;color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13.7px;flex-shrink:0;">1</span>
+      <h2 style="font-size:16.7px;font-weight:800;color:#0F3ED2;margin:0;flex-shrink:0;white-space:nowrap;">学员基本信息</h2>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">学员姓名 *</label>
+      <input type="text" value="{{ name }}" onChange="{{ onName }}" placeholder="必填" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div>
+        <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">年级</label>
+        <select value="{{ grade }}" onChange="{{ onGrade }}" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;">
+          <option value="">请选择</option>
+          <option>幼儿园大班</option><option>一年级</option><option>二年级</option><option>三年级</option>
+          <option>四年级</option><option>五年级</option><option>六年级</option><option>初一</option><option>初二及以上</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">批次 / 时段</label>
+        <select value="{{ slotSelectValue }}" onChange="{{ onSlotSelectChange }}" style-focus="outline:none;border-color:#2456E8;" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;">
+          <option value="">请选择</option>
+          <sc-for list="{{ slotPresets }}" as="sp" hint-placeholder-count="6">
+            <option value="{{ sp }}">{{ sp }}</option>
+          </sc-for>
+          <option value="__custom__">自定义…</option>
+        </select>
+        <sc-if value="{{ slotShowCustom }}">
+          <input type="text" value="{{ slot }}" onChange="{{ onSlot }}" placeholder="批次1 · 上午场" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;margin-top:8px;"/>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#0F3ED2;color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13.7px;flex-shrink:0;">2</span>
+      <h2 style="font-size:16.7px;font-weight:800;color:#0F3ED2;margin:0;flex-shrink:0;white-space:nowrap;">本次体验模块</h2>
+    </div>
+    <div style="font-size:13.7px;color:#6B7280;margin-bottom:10px;line-height:1.6;">勾选学生<b style="color:#b45309;">实际体验过</b>的模块，未体验的不要勾。家长会核对，勾多了反而失信。</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <sc-for list="{{ modsView }}" as="m" hint-placeholder-count="6">
+        <div onClick="{{ m.toggle }}" style="{{ m.chipStyle }}">{{ m.name }}</div>
+      </sc-for>
+      <sc-if value="{{ notAddingMod }}" hint-placeholder-val="{{ true }}">
+        <div onClick="{{ toggleAddMod }}" style="font-size:15.2px;padding:10px 16px;border-radius:20px;border:1.5px dashed #A9BFF3;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;">＋ 自定义</div>
+      </sc-if>
+      <sc-if value="{{ addingMod }}">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" value="{{ newModDraft }}" onChange="{{ onNewModDraft }}" placeholder="模块名称" style-focus="outline:none;border-color:#2456E8;" style="font-size:15.7px;padding:9px 12px;border:1.5px solid #2456E8;border-radius:20px;width:130px;box-sizing:border-box;"/>
+          <button onClick="{{ confirmAddMod }}" style="font-size:14.7px;font-weight:700;color:#fff;background:#0F3ED2;border:none;border-radius:16px;padding:9px 14px;appearance:none;-webkit-appearance:none;white-space:nowrap;">添加</button>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#0F3ED2;color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13.7px;flex-shrink:0;">3</span>
+      <h2 style="font-size:16.7px;font-weight:800;color:#0F3ED2;margin:0;flex-shrink:0;white-space:nowrap;">课堂表现总评</h2>
+    </div>
+    <div style="font-size:13.7px;color:#6B7280;margin-bottom:10px;line-height:1.6;">五点刻度，左起 待加强 → 突出。<b style="color:#b45309;">请勿整排给满分</b>：全 5 分的报告家长看不出信息，反而觉得敷衍。</div>
+
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;background:#fafaf9;border:1px solid #E7EBF3;border-radius:8px;padding:8px 10px;">
+      <span style="font-size:12.7px;color:#6B7280;font-weight:700;">报告呈现方式</span>
+      <sc-for list="{{ chartTypeView }}" as="c" hint-placeholder-count="3">
+        <div onClick="{{ c.select }}" style="{{ c.chipStyle }}">{{ c.label }}</div>
+      </sc-for>
+    </div>
+    <div style="font-size:12.2px;color:#9AA3B2;text-align:right;margin-bottom:4px;">① 正在起步　② 稳步提升　③ 达标　④ 良好　⑤ 突出</div>
+
+    <sc-for list="{{ dimsFormView }}" as="d" hint-placeholder-count="5">
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px dashed #E7EBF3;flex-wrap:wrap;">
+        <div style="width:70px;font-size:15.2px;font-weight:700;flex-shrink:0;">{{ d.name }}</div>
+        <div style="flex:1;font-size:12.7px;color:#6B7280;min-width:110px;">{{ d.desc }}</div>
+        <div style="display:flex;gap:0px;flex-shrink:0;">
+          <sc-for list="{{ d.dots }}" as="dot" hint-placeholder-count="5">
+            <div onClick="{{ dot.set }}" style="width:34px;height:34px;display:grid;place-items:center;cursor:pointer;flex-shrink:0;">
+              <div style="{{ dot.innerStyle }}"></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="width:44px;font-size:12.7px;color:#6B7280;text-align:right;flex-shrink:0;">{{ d.label }}</div>
+      </div>
+    </sc-for>
+
+    <sc-if value="{{ showInflateAlert }}">
+      <div style="background:#fffbeb;border:1.5px solid #fcd34d;color:#92400e;border-radius:8px;padding:10px 12px;font-size:13.7px;line-height:1.6;margin-top:10px;">⚠ 五项全部 4 分以上。真实的孩子总有强弱之分，建议至少有一项如实给 3 分——差异化的报告才有说服力。</div>
+    </sc-if>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#0F3ED2;color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13.7px;flex-shrink:0;">4</span>
+      <h2 style="font-size:16.7px;font-weight:800;color:#0F3ED2;margin:0;flex-shrink:0;white-space:nowrap;">本次模块技能掌握</h2>
+    </div>
+    <div style="font-size:13.7px;color:#6B7280;margin-bottom:10px;line-height:1.6;">最多填 3 项，只填实际做过的。技能点要具体，例如「齿轮传动搭建」「循环指令调试」「巡线任务完成」。</div>
+
+    <sc-for list="{{ skillsView }}" as="sk" hint-placeholder-count="3">
+      <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px dashed #E7EBF3;">
+        <div style="display:flex;gap:8px;">
+          <select value="{{ sk.moduleValue }}" onChange="{{ sk.onModuleChange }}" style-focus="outline:none;border-color:#2456E8;" style="flex:1;font-size:16.7px;padding:10px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;min-width:0;box-sizing:border-box;">
+            <option value="">— 选择模块 —</option>
+            <sc-for list="{{ sk.moduleOptions }}" as="opt" hint-placeholder-count="4">
+              <option value="{{ opt.value }}">{{ opt.label }}</option>
+            </sc-for>
+          </select>
+          <div style="display:flex;flex-shrink:0;">
+            <sc-for list="{{ sk.dots }}" as="dot" hint-placeholder-count="5">
+              <div onClick="{{ dot.set }}" style="width:30px;height:30px;display:grid;place-items:center;cursor:pointer;">
+                <div style="{{ dot.innerStyle }}"></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <input type="text" value="{{ sk.point }}" onChange="{{ sk.onPointChange }}" placeholder="具体技能点（如：齿轮传动搭建）" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="flex:1;min-width:0;font-size:17.5px;padding:10px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/>
+          <button onClick="{{ sk.polish }}" style="flex-shrink:0;font-size:16.7px;padding:0 14px;border:1.5px solid #A9BFF3;border-radius:10px;background:#EEF3FF;color:#0F3ED2;appearance:none;-webkit-appearance:none;">{{ sk.polishLabel }}</button>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#0F3ED2;color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13.7px;flex-shrink:0;">5</span>
+      <h2 style="font-size:16.7px;font-weight:800;color:#0F3ED2;margin:0;flex-shrink:0;white-space:nowrap;">老师观察记录</h2>
+    </div>
+    <div style="font-size:13.7px;color:#6B7280;margin-bottom:10px;line-height:1.7;">这是整份报告最有价值的部分。<b style="color:#b45309;">写具体发生的事，不写形容词。</b><br>
+      ✅「齿轮卡住时他自己拆开重装了两次，没有叫老师」<br>
+      ❌「表现很棒，很有天赋，对机器人很感兴趣」——零信息量，家长看完不会有任何反应。</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">课堂上的具体表现 *</label>
+      <span onClick="{{ polishObs1 }}" style="font-size:13.2px;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;">{{ obs1PolishLabel }}</span>
+    </div>
+    <textarea value="{{ obs1 }}" onChange="{{ onObs1 }}" placeholder="至少写一个具体场景：什么时候、发生了什么、他怎么反应的" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:16.7px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;min-height:76px;line-height:1.6;resize:vertical;"></textarea>
+    <div style="height:10px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">下一步的成长建议 *</label>
+      <span onClick="{{ polishObs2 }}" style="font-size:13.2px;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;">{{ obs2PolishLabel }}</span>
+    </div>
+    <textarea value="{{ obs2 }}" onChange="{{ onObs2 }}" placeholder="例：程序调试时容易跳过检查步骤，建议在项目班中多做完整排查训练" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:16.7px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;min-height:76px;line-height:1.6;resize:vertical;"></textarea>
+    <sc-if value="{{ showObsWarning }}">
+      <div style="background:#fffbeb;border:1.5px solid #fcd34d;color:#92400e;border-radius:8px;padding:10px 12px;font-size:13.7px;line-height:1.6;margin-top:10px;">{{ obsWarningText }}</div>
+    </sc-if>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#0F3ED2;color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13.7px;flex-shrink:0;">6</span>
+      <h2 style="font-size:16.7px;font-weight:800;color:#0F3ED2;margin:0;flex-shrink:0;white-space:nowrap;">方向推荐</h2>
+    </div>
+    <div style="font-size:13.7px;color:#6B7280;margin-bottom:10px;line-height:1.6;"><b style="color:#b45309;">必须给出唯一推荐方向，不要写"都适合"。</b>不敢下判断，等于把选择又推回给家长。</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+      <sc-for list="{{ dirsView }}" as="d" hint-placeholder-count="4">
+        <div onClick="{{ d.select }}" style="{{ d.boxStyle }}">
+          <div style="{{ d.nameStyle }}">{{ d.name }}</div>
+          <div style="{{ d.descStyle }}">{{ d.desc }}</div>
+        </div>
+      </sc-for>
+      <div onClick="{{ selectCustomDir }}" style="{{ dirCustomBoxStyle }}grid-column:1 / -1;">
+        <input type="text" value="{{ dirCustomName }}" onChange="{{ onDirCustomName }}" placeholder="＋ 自定义方向名称" style-focus="outline:none;" style="display:block;width:100%;border:none;background:transparent;text-align:center;font-size:14.7px;font-weight:800;color:#0F3ED2;box-sizing:border-box;padding:0;"/>
+        <input type="text" value="{{ dirCustomDesc }}" onChange="{{ onDirCustomDesc }}" placeholder="一句话描述（选填）" style-focus="outline:none;" style="display:block;width:100%;border:none;background:transparent;text-align:center;font-size:9.5px;color:#6B7280;margin-top:2px;box-sizing:border-box;padding:0;"/>
+      </div>
+    </div>
+
+    <div style="height:12px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">推荐理由 *（必须引用第 5 项里的具体行为）</label>
+      <span onClick="{{ polishReason }}" style="font-size:13.2px;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;">{{ reasonPolishLabel }}</span>
+    </div>
+    <textarea value="{{ reason }}" onChange="{{ onReason }}" placeholder="例：三个项目里他在机器人站待的时间最长，卡住时愿意自己反复试，这种不怕出错的状态在这个年龄不多见。" style-focus="outline:none;border-color:#2456E8;box-shadow:0 0 0 3px rgba(15,62,210,.12);" style="width:100%;font-size:16.7px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;min-height:64px;line-height:1.6;resize:vertical;"></textarea>
+
+    <div style="height:12px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">建议秋季班级 *</label>
+      <span style="display:flex;gap:10px;">
+        <span onClick="{{ toggleClassSettings }}" style="font-size:13.2px;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;">管理班级列表</span>
+        <span onClick="{{ togglePromoSettings }}" style="font-size:13.2px;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;">编辑优惠文案</span>
+      </span>
+    </div>
+    <select value="{{ classValue }}" onChange="{{ onClassChange }}" style-focus="outline:none;border-color:#2456E8;" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;">
+      <option value="">请选择（自动带出上课时间）</option>
+      <sc-for list="{{ classOptions }}" as="opt" hint-placeholder-count="6">
+        <option value="{{ opt.value }}">{{ opt.label }}</option>
+      </sc-for>
+    </select>
+    <sc-if value="{{ classTime }}">
+      <div style="font-size:13.7px;color:#6B7280;margin-top:6px;">上课时间：{{ classTime }}</div>
+    </sc-if>
+
+    <sc-if value="{{ showDirAlert }}">
+      <div style="background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;border-radius:8px;padding:10px 12px;font-size:13.7px;line-height:1.6;margin-top:10px;">⚠ 尚未选择推荐方向。</div>
+    </sc-if>
+  </div>
+
+  <div style="background:#fff;border:1px solid #E7EBF3;border-radius:14px;padding:16px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="background:#0F3ED2;color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13.7px;flex-shrink:0;">7</span>
+      <h2 style="font-size:16.7px;font-weight:800;color:#0F3ED2;margin:0;flex-shrink:0;white-space:nowrap;">内部联（仅内部记录，不出现在家长版报告/图片中）</h2>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">家长到场</label>
+        <select value="{{ attendp }}" onChange="{{ onAttendp }}" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;"><option>是</option><option>否</option></select></div>
+      <div><label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">现场沟通</label>
+        <select value="{{ talk }}" onChange="{{ onTalk }}" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;"><option>已完成</option><option>待跟进</option></select></div>
+      <div><label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">报名意向</label>
+        <select value="{{ intent }}" onChange="{{ onIntent }}" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;"><option>高</option><option>中</option><option>低</option></select></div>
+      <div><label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">未成交原因</label>
+        <select value="{{ why }}" onChange="{{ onWhy }}" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;background:#fff;box-sizing:border-box;"><option value="">—</option><option>时间冲突</option><option>价格</option><option>与孩子意愿不符</option><option>需与家人商量</option><option>其他</option></select></div>
+    </div>
+    <div style="height:10px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">推荐人</label>
+        <input type="text" value="{{ ref }}" onChange="{{ onRef }}" placeholder="老生家长姓名" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/></div>
+      <div><label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">下次跟进日期</label>
+        <input type="text" value="{{ follow }}" onChange="{{ onFollow }}" placeholder="9月2日" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/></div>
+    </div>
+    <div style="height:10px;"></div>
+    <label style="display:block;font-size:13.7px;color:#6B7280;margin-bottom:4px;">顾问跟进备注</label>
+    <input type="text" value="{{ note }}" onChange="{{ onNote }}" placeholder="家长关注点、需特别留意的情况" style="width:100%;font-size:17.5px;padding:11px 12px;border:1.5px solid #D3D9E5;border-radius:10px;box-sizing:border-box;"/>
+  </div>
+
+  <sc-if value="{{ canDeleteStudent }}">
+    <div style="text-align:center;padding:4px 0 8px;">
+      <button onClick="{{ removeStudent }}" style="background:none;border:none;color:#991b1b;font-size:14.2px;padding:8px 12px;appearance:none;-webkit-appearance:none;">删除当前学生记录</button>
+    </div>
+  </sc-if>
+</div>
+
+<div style="position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.98);border-top:1.5px solid #E7EBF3;padding:12px 16px calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px;align-items:center;backdrop-filter:blur(8px);z-index:50;box-sizing:border-box;">
+  <button onClick="{{ generateReport }}" style="width:100%;max-width:520px;padding:14px;border-radius:12px;border:none;background:#0F3ED2;color:#fff;font-size:16.7px;font-weight:800;appearance:none;-webkit-appearance:none;">{{ generateLabel }}</button>
+  <sc-if value="{{ status }}">
+    <div style="{{ statusStyle }}">{{ status }}</div>
+  </sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isReportMode }}">
+  <sc-if value="{{ !printing }}" hint-placeholder-val="{{ true }}">
+    <div style="max-width:640px;margin:0 auto;padding:12px 14px 0;box-sizing:border-box;">
+      <button onClick="{{ backToForm }}" style="background:none;border:none;color:#0F3ED2;font-size:15.2px;font-weight:700;padding:8px 0;appearance:none;-webkit-appearance:none;">‹ 返回修改</button>
+    </div>
+  </sc-if>
+
+  <doc-page size="a4" data-screen-label="报告">
+    <section class="page" ref="{{ pageRef }}" style="padding:10mm 12mm 8mm;display:flex;flex-direction:column;background:#fff;box-sizing:border-box;background-image:repeating-linear-gradient(0deg,rgba(15,62,210,0.03) 0 1px,transparent 1px 5mm),repeating-linear-gradient(90deg,rgba(15,62,210,0.03) 0 1px,transparent 1px 5mm);">
+      <img src="assets/logo-mark.png" style="position:absolute;left:50%;top:52%;width:135mm;height:125mm;object-fit:contain;transform:translate(-50%,-50%);opacity:0.05;pointer-events:none;"/>
+      <div style="position:relative;z-index:1;display:flex;flex-direction:column;flex:1;">
+
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #0F3ED2;padding-bottom:7px;">
+          <div>
+            <img src="assets/logo-lockup.png" style="width:46mm;height:11.5mm;object-fit:contain;margin-bottom:4px;display:block;"/>
+            <h1 style="font-size:19px;font-weight:800;letter-spacing:.5px;margin:0;">科创体验报告</h1>
+            <div style="font-size:10.5px;color:#6B7280;margin-top:3px;">秋日科创体验专场 · 结课综合评价　｜　{{ reportName }}　同学</div>
+          </div>
+          <div style="text-align:right;font-size:10px;color:#6B7280;line-height:1.45;">
+            <b style="display:block;font-size:12px;color:#0F3ED2;letter-spacing:.5px;">MAKERSEED · 种子创客工坊</b>
+            江门市市级科普教育基地<br>深耕青少年科创教育 8 年
+          </div>
+        </div>
+
+        <div style="margin-top:7px;display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #E7EBF3;border-radius:5px;overflow:hidden;">
+          <div style="padding:4px 9px;border-right:1px solid #E7EBF3;border-bottom:1px solid #E7EBF3;"><div style="font-size:8.5px;color:#6B7280;">学员姓名</div><div style="font-size:11.5px;font-weight:700;min-height:15px;">{{ reportName }}</div></div>
+          <div style="padding:4px 9px;border-right:1px solid #E7EBF3;border-bottom:1px solid #E7EBF3;"><div style="font-size:8.5px;color:#6B7280;">年级</div><div style="font-size:11.5px;font-weight:700;min-height:15px;">{{ reportGrade }}</div></div>
+          <div style="padding:4px 9px;border-bottom:1px solid #E7EBF3;"><div style="font-size:8.5px;color:#6B7280;">体验日期</div><div style="font-size:11.5px;font-weight:700;min-height:15px;">{{ reportDate }}</div></div>
+          <div style="padding:4px 9px;border-right:1px solid #E7EBF3;"><div style="font-size:8.5px;color:#6B7280;">批次 / 时段</div><div style="font-size:11.5px;font-weight:700;min-height:15px;">{{ reportSlot }}</div></div>
+          <div style="padding:4px 9px;border-right:1px solid #E7EBF3;"><div style="font-size:8.5px;color:#6B7280;">授课教师</div><div style="font-size:11.5px;font-weight:700;min-height:15px;">{{ reportTeacher }}</div></div>
+          <div style="padding:4px 9px;"><div style="font-size:8.5px;color:#6B7280;">报告日期</div><div style="font-size:11.5px;font-weight:700;min-height:15px;">{{ reportFillDate }}</div></div>
+        </div>
+
+        <div style="margin-top:7px;">
+          <div style="font-size:12px;font-weight:800;color:#0F3ED2;display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="width:3px;height:12px;background:#0F3ED2;border-radius:1px;flex-shrink:0;"></span>一、本次体验模块<span style="flex:1;height:1px;background:#E7EBF3;"></span></div>
+          <div style="font-size:10.5px;color:#262626;line-height:1.75;">
+            <sc-if value="{{ reportModsEmpty }}">
+              <span style="display:inline-block;background:#fff;border:1px solid #D3D9E5;color:#6B7280;border-radius:11px;padding:1px 9px;">未勾选</span>
+            </sc-if>
+            <sc-for list="{{ reportMods }}" as="m" hint-placeholder-count="3">
+              <span style="display:inline-block;background:#EEF3FF;border:1px solid #A9BFF3;color:#0F3ED2;border-radius:11px;padding:1px 9px;margin:0 5px 3px 0;font-weight:600;">{{ m.name }}</span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="margin-top:7px;">
+          <div style="font-size:12px;font-weight:800;color:#0F3ED2;display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="width:3px;height:12px;background:#0F3ED2;border-radius:1px;flex-shrink:0;"></span>二、课堂表现总评<span style="flex:1;height:1px;background:#E7EBF3;"></span></div>
+
+          <sc-if value="{{ isRadar }}">
+            <div style="display:flex;gap:12px;align-items:center;">
+              <svg width="250" height="195" viewBox="0 0 250 195" style="flex-shrink:0;">
+                <sc-for list="{{ radar.rings }}" as="ring" hint-placeholder-count="5">
+                  <polygon points="{{ ring.points }}" fill="none" stroke="#e7e5e4" strokeWidth="0.8"></polygon>
+                </sc-for>
+                <sc-for list="{{ radar.spokes }}" as="sp" hint-placeholder-count="5">
+                  <line x1="{{ radar.cx }}" y1="{{ radar.cy }}" x2="{{ sp.x2 }}" y2="{{ sp.y2 }}" stroke="#e7e5e4" strokeWidth="0.8"></line>
+                </sc-for>
+                <polygon points="{{ radar.dataPoints }}" fill="rgba(15,62,210,.14)" stroke="#0F3ED2" strokeWidth="2" strokeLinejoin="round"></polygon>
+                <sc-for list="{{ radar.dots }}" as="d" hint-placeholder-count="5">
+                  <circle cx="{{ d.cx }}" cy="{{ d.cy }}" r="3.4" fill="#0F3ED2"></circle>
+                </sc-for>
+                <sc-for list="{{ radar.labels }}" as="l" hint-placeholder-count="5">
+                  <text x="{{ l.x }}" y="{{ l.y }}" textAnchor="{{ l.anchor }}" fontSize="10.5" fontWeight="700" fill="#44403c">{{ l.name }}</text>
+                </sc-for>
+              </svg>
+              <div style="flex:1;">
+                <sc-for list="{{ dotView }}" as="d" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:center;gap:7px;padding:2.5px 0;font-size:10.5px;border-bottom:1px dashed #E7EBF3;">
+                    <span style="width:60px;font-weight:700;flex-shrink:0;">{{ d.name }}</span>
+                    <span style="flex:1;font-size:9px;color:#6B7280;">{{ d.desc }}</span>
+                    <span style="font-weight:800;color:#0F3ED2;font-size:10.5px;white-space:nowrap;">{{ d.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isBar }}">
+            <sc-for list="{{ barView }}" as="d" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:8px;padding:3.5px 0;border-bottom:1px dashed #E7EBF3;">
+                <span style="width:66px;font-size:11.5px;font-weight:700;flex-shrink:0;">{{ d.name }}</span>
+                <span style="width:150px;font-size:9px;color:#6B7280;flex-shrink:0;">{{ d.desc }}</span>
+                <span style="flex:1;height:11px;background:#f5f5f4;border:1px solid #E7EBF3;border-radius:6px;overflow:hidden;display:block;">
+                  <span style="{{ d.barFillStyle }}"></span>
+                </span>
+                <span style="width:44px;font-size:10px;font-weight:800;color:#0F3ED2;text-align:right;flex-shrink:0;">{{ d.label }}</span>
+              </div>
+            </sc-for>
+          </sc-if>
+
+          <sc-if value="{{ isDot }}">
+            <table style="width:100%;border-collapse:collapse;">
+              <sc-for list="{{ dotView }}" as="d" hint-placeholder-count="5">
+                <tr>
+                  <td style="width:70px;font-size:11.5px;font-weight:700;padding:3px 0;border-bottom:1px dashed #E7EBF3;">{{ d.name }}</td>
+                  <td style="font-size:9.5px;color:#6B7280;padding:3px 8px 3px 0;border-bottom:1px dashed #E7EBF3;">{{ d.desc }}</td>
+                  <td style="width:100px;text-align:right;white-space:nowrap;padding:3px 0;border-bottom:1px dashed #E7EBF3;">
+                    <sc-for list="{{ d.dots }}" as="dot" hint-placeholder-count="5">
+                      <i style="{{ dot.pdStyle }}"></i>
+                    </sc-for>
+                  </td>
+                  <td style="width:40px;font-size:9.5px;color:#6B7280;text-align:right;padding:3px 0;border-bottom:1px dashed #E7EBF3;">{{ d.label }}</td>
+                </tr>
+              </sc-for>
+            </table>
+          </sc-if>
+        </div>
+
+        <div style="margin-top:7px;">
+          <div style="font-size:12px;font-weight:800;color:#0F3ED2;display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="width:3px;height:12px;background:#0F3ED2;border-radius:1px;flex-shrink:0;"></span>三、模块技能掌握<span style="flex:1;height:1px;background:#E7EBF3;"></span></div>
+          <sc-if value="{{ reportSkillsEmpty }}">
+            <div style="color:#6B7280;font-size:10px;padding:5px 0;">本次未记录单项技能</div>
+          </sc-if>
+          <table style="width:100%;border-collapse:collapse;">
+            <sc-for list="{{ reportSkills }}" as="sk" hint-placeholder-count="0">
+              <tr>
+                <td style="width:130px;font-weight:700;font-size:10.5px;padding:3px 0;border-bottom:1px dashed #E7EBF3;">{{ sk.m }}</td>
+                <td style="color:#262626;font-size:10.5px;padding:3px 0;border-bottom:1px dashed #E7EBF3;">{{ sk.p }}</td>
+                <td style="width:90px;text-align:right;white-space:nowrap;padding:3px 0;border-bottom:1px dashed #E7EBF3;">
+                  <sc-for list="{{ sk.dots }}" as="dot" hint-placeholder-count="5">
+                    <i style="{{ dot.pdStyle }}"></i>
+                  </sc-for>
+                </td>
+                <td style="width:42px;font-size:9.5px;color:#0F3ED2;font-weight:800;text-align:right;padding:3px 0;border-bottom:1px dashed #E7EBF3;">{{ sk.label }}</td>
+              </tr>
+            </sc-for>
+          </table>
+        </div>
+
+        <div style="margin-top:7px;">
+          <div style="font-size:12px;font-weight:800;color:#0F3ED2;display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="width:3px;height:12px;background:#0F3ED2;border-radius:1px;flex-shrink:0;"></span>四、老师观察记录<span style="flex:1;height:1px;background:#E7EBF3;"></span></div>
+          <div style="border:1px solid #E7EBF3;border-radius:5px;padding:6px 10px;">
+            <div style="font-size:10.5px;font-weight:700;color:#262626;">课堂上的具体表现</div>
+            <div style="font-size:11px;line-height:1.65;margin:2px 0 6px;white-space:pre-wrap;">{{ reportObs1 }}</div>
+            <div style="font-size:10.5px;font-weight:700;color:#262626;">下一步的成长建议</div>
+            <div style="font-size:11px;line-height:1.65;margin:2px 0 0;white-space:pre-wrap;">{{ reportObs2 }}</div>
+          </div>
+        </div>
+
+        <div style="margin-top:7px;border:2px solid #0F3ED2;border-radius:7px;background:#EEF3FF;padding:8px 12px;">
+          <div style="font-size:11px;font-weight:800;color:#0F3ED2;margin-bottom:6px;">五、方向推荐</div>
+          <div style="display:flex;gap:6px;margin-bottom:7px;">
+            <sc-for list="{{ reportDirs }}" as="d" hint-placeholder-count="4">
+              <div style="{{ d.boxStyle }}">
+                <div style="{{ d.nameStyle }}">{{ d.checkPrefix }}{{ d.name }}</div>
+                <div style="{{ d.descStyle }}">{{ d.desc }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:10.5px;line-height:1.6;margin-bottom:5px;"><b style="font-weight:800;">推荐理由：</b>{{ reportReason }}</div>
+          <div style="display:flex;gap:14px;font-size:10.5px;">
+            <div style="flex:1;"><b style="font-weight:800;">建议班级：</b>{{ reportClassName }}</div>
+            <div style="flex:1;"><b style="font-weight:800;">上课时间：</b>{{ reportClassTime }}</div>
+          </div>
+        </div>
+
+        <div style="margin-top:6px;border:1px dashed #A9BFF3;border-radius:5px;background:#EEF3FF;padding:6px 10px;font-size:9.5px;color:#262626;line-height:1.55;white-space:pre-wrap;">{{ reportPromoText }}</div>
+
+        <div style="margin-top:auto;padding-top:7px;border-top:1px solid #E7EBF3;display:flex;justify-content:space-between;align-items:flex-end;font-size:9.5px;color:#6B7280;">
+          <div style="display:flex;gap:22px;">
+            <span>授课教师<span style="display:inline-block;border-bottom:1px solid #D3D9E5;min-width:74px;text-align:center;color:#0A0A0A;font-weight:600;margin-left:4px;padding:0 4px;">{{ reportTeacher }}</span></span>
+            <span>日期<span style="display:inline-block;border-bottom:1px solid #D3D9E5;min-width:74px;text-align:center;color:#0A0A0A;font-weight:600;margin-left:4px;padding:0 4px;">{{ reportFillDate }}</span></span>
+          </div>
+          <div>种子创客工坊 · 结课评价</div>
+        </div>
+
+        <sc-if value="{{ showInternal }}">
+          <div style="margin-top:7px;background:#F4F5F7;border:1px solid #D3D9E5;border-radius:6px;padding:7px 10px;">
+            <div style="font-size:9px;color:#6B7280;font-weight:700;letter-spacing:1px;margin-bottom:4px;">工坊内部记录 · 不对外</div>
+            <div style="font-size:9.5px;color:#262626;margin-bottom:3px;"><b>家长到场：</b>{{ attendpR }}　　<b>现场沟通：</b>{{ talkR }}　　<b>报名意向：</b>{{ intentR }}　　<b>未成交原因：</b>{{ whyR }}</div>
+            <div style="font-size:9.5px;color:#262626;margin-bottom:3px;"><b>推荐人：</b>{{ refR }}　　<b>下次跟进：</b>{{ followR }}　　<b>结果：</b>○ 已续报　○ 未续报</div>
+            <div style="font-size:9.5px;color:#262626;"><b>顾问备注：</b>{{ noteR }}</div>
+          </div>
+        </sc-if>
+
+      </div>
+    </section>
+  </doc-page>
+
+  <sc-if value="{{ !printing }}" hint-placeholder-val="{{ true }}">
+    <div style="position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.98);border-top:1.5px solid #E7EBF3;padding:12px 16px calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;align-items:center;backdrop-filter:blur(8px);z-index:50;box-sizing:border-box;">
+      <div style="display:flex;gap:10px;width:100%;max-width:520px;">
+        <button onClick="{{ exportImage }}" style="flex:1;padding:13px;border-radius:12px;border:1.5px solid #0F3ED2;background:#fff;color:#0F3ED2;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">保存图片</button>
+        <button onClick="{{ exportPDF }}" style="flex:1;padding:13px;border-radius:12px;border:none;background:#0F3ED2;color:#fff;font-size:15.7px;font-weight:800;appearance:none;-webkit-appearance:none;">打印 / 存 PDF</button>
+      </div>
+      <sc-if value="{{ status }}">
+        <div style="{{ statusStyle }}">{{ status }}</div>
+      </sc-if>
+    </div>
+  </sc-if>
+</sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;showInternalSection&quot;: {&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;行为&quot;},
+  &quot;defaultChartType&quot;: {&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;radar&quot;,&quot;options&quot;:[&quot;radar&quot;,&quot;bar&quot;,&quot;dot&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;行为&quot;},
+  &quot;filenamePattern&quot;: {&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;{name}_{date}_科创体验报告&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;行为&quot;}
+}">
+var MODULES = ["乐高搭建","SPIKE科创编程","Mind+图形化编程","mBot2机器人编程","智能智造·电子电路",
+  "3D打印/激光切割","无人机操控","机甲大师对抗","AI人工智能体验","创意小车设计","体感控制"];
+
+var DIMS = [
+  ["动手实践","操作器材熟练，能独立完成作品与任务"],
+  ["理解表达","听懂课堂知识，能讲出作品原理与思路"],
+  ["专注投入","遇到困难主动尝试，不轻易求助或放弃"],
+  ["创意想法","有自己的想法，敢于改造或提出新方案"],
+  ["合作习惯","愿意配合分享，遵守课堂秩序与安全规范"]
+];
+var RLAB = ["正在起步","稳步提升","达标","良好","突出"];
+var SLOT_PRESETS = ["批次1 · 上午场","批次2 · 上午场","批次1 · 下午场","批次2 · 下午场","晚场"];
+var PROMO_DEFAULT = '关于秋季班：本报告推荐的班级已为您预留席位。体验课费用 199 元可全额抵扣秋季班学费，抵扣仅限本人报读 2026 秋季班使用，有效期至 2026 年 9 月 13 日，不可转让、不折现。如需调整时段或了解课程成长路径（兴趣启蒙 → 系统进阶 → 项目实战 → 竞赛冲刺），请联系课程顾问 13066252826（微信同号）。';
+var DIRS = [
+  ["机器人","结构 · 搭建 · 操控"],
+  ["编程","逻辑 · 算法 · 调试"],
+  ["创客造物","设计 · 建模 · 制作"],
+  ["AI / 竞赛","进阶 · 项目 · 参赛"]
+];
+var CLASSES = [
+  ["头脑风暴1.0 V1","周六 8:30-10:00 · 创客3室"],
+  ["头脑风暴1.0 V1","周日 14:30-16:00 · 创客1室"],
+  ["头脑风暴2.0 V1","周六 16:15-17:45 · 创客2室"],
+  ["头脑风暴2.0 V1","周日 8:30-10:00 · 创客2室"],
+  ["头脑风暴2.0 V1","周日 10:15-11:45 · 创客2室"],
+  ["头脑风暴2.0 V2","周六 8:30-10:00 · 创客2室"],
+  ["头脑风暴3.0 V1","周六 8:30-10:00 · 创客1室"],
+  ["头脑风暴3.0 V2","周六 10:15-11:45 · 创客1室"],
+  ["头脑风暴3.0 V2","周日 8:30-10:00 · 创客1室"],
+  ["智能智造1.0 V1","周六 8:30-10:00 · 229室"],
+  ["智能智造1.0 V1","周日 14:30-16:00 · 创客1室"],
+  ["智能智造1.0 V2","周六 14:30-16:00 · 229室"],
+  ["智能智造1.0 V2","周日 16:15-17:45 · 229室"],
+  ["智能智造2.0 V1","周六 10:15-11:45 · 229室"],
+  ["智能智造2.0 V1","周日 14:30-16:00 · 229室"],
+  ["智能智造2.0 V2","周日 8:30-10:00 · 229室"],
+  ["Scratch（入门）","周六 10:15-11:45 · 创客2室"],
+  ["Scratch（入门）","周日 16:15-17:45 · 创客2室"],
+  ["Scratch（进阶）","周六 14:30-16:00 · 创客2室"],
+  ["Python 研习社","周五 19:00-20:30 · 229室"],
+  ["Python 研习社","周日 10:15-11:45 · 229室"],
+  ["模拟飞行1.0 V1","周六 14:30-16:00 · 创客1室"],
+  ["编程无人机1.0 V1","周六 16:15-17:45 · 创客1室"],
+  ["AI创意应用2.0 V1/V2","周六 16:15-17:45 · 229室"],
+  ["车辆模型竞赛班","周日 10:15-11:45 · 创客1室"]
+];
+
+function pad2(n){ return n<10 ? '0'+n : ''+n; }
+function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function todayCompact(){ var d=new Date(); return ''+d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate()); }
+function todayKey(){ return new Date().toDateString(); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+function emptyStudent(prefill, defaultChart){
+  return {
+    id: uid(), name:'', grade:'',
+    slot: prefill ? prefill.slot : '',
+    slotCustom: prefill ? !!prefill.slotCustom : false,
+    mods: prefill ? prefill.mods.slice() : [],
+    customMods: prefill ? prefill.customMods.slice() : [],
+    chart: prefill ? prefill.chart : (defaultChart || 'radar'),
+    rates:[0,0,0,0,0],
+    skills:[{m:'',p:'',r:0},{m:'',p:'',r:0},{m:'',p:'',r:0}],
+    obs1:'', obs2:'',
+    dir:-1, reason:'', classIndex:'', dirCustom:{name:'',desc:''},
+    attendp:'是', talk:'已完成', intent:'高', why:'', ref:'', follow:'', note:'',
+    generated:false
+  };
+}
+function emptyBatch(defaultChart){
+  return { id: uid(), date:'', teacher:'', fillDate: todayISO(), _day: todayKey(), students:[emptyStudent(null, defaultChart)] };
+}
+function radarGeometry(rates){
+  var cx=125, cy=98, R=62, N=5;
+  function pt(i,f){ var a=(-90+i*(360/N))*Math.PI/180; return [cx+R*f*Math.cos(a), cy+R*f*Math.sin(a)]; }
+  var rings=[];
+  for(var g=1; g<=5; g++){
+    var p=[];
+    for(var i=0;i<N;i++){ var q=pt(i,g/5); p.push(q[0].toFixed(1)+','+q[1].toFixed(1)); }
+    rings.push({points:p.join(' ')});
+  }
+  var spokes=[];
+  for(var i=0;i<N;i++){ var q=pt(i,1); spokes.push({x2:q[0].toFixed(1), y2:q[1].toFixed(1)}); }
+  var dp=[], dots=[];
+  for(var i=0;i<N;i++){
+    var v=rates[i]||0, q=pt(i, v/5);
+    dp.push(q[0].toFixed(1)+','+q[1].toFixed(1));
+    if(v>0) dots.push({cx:q[0].toFixed(1), cy:q[1].toFixed(1)});
+  }
+  var labels=[]; var names=DIMS.map(function(d){return d[0];});
+  for(var i=0;i<N;i++){
+    var q=pt(i,1.28), anchor='middle';
+    if(q[0]>cx+14) anchor='start'; else if(q[0]<cx-14) anchor='end';
+    var dy = i===0? 0 : 3.5;
+    labels.push({x:q[0].toFixed(1), y:(q[1]+dy).toFixed(1), anchor:anchor, name:names[i]});
+  }
+  return {rings:rings, spokes:spokes, dataPoints:dp.join(' '), dots:dots, labels:labels, cx:cx, cy:cy};
+}
+
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    var loaded = this._load();
+    this.state = loaded || {
+      batches:[emptyBatch(props.defaultChartType)],
+      activeBatch:0, activeStudent:0, mode:'form', printing:false,
+      showHistory:false, showCrossDay:false, batchEditOpen:false,
+      status:'', statusColor:'', exportBusy:false, printIncludeInternal:false,
+      addingMod:false, newModDraft:''
+    };
+    this.state.classList = this._loadClassList();
+    this.state.showClassSettings = false;
+    this.state.aiCfg = this._loadAiCfg();
+    this.state.showAiSettings = false;
+    this.state.aiBusyField = null;
+    this.state.promoText = this._loadPromoText();
+    this.state.showPromoSettings = false;
+    this.pageRef = React.createRef();
+  }
+  _loadPromoText(){
+    try{ var raw=localStorage.getItem('mkseed_diag_promo_v1'); if(raw) return raw; }catch(e){}
+    return PROMO_DEFAULT;
+  }
+  _persistPromoText(v){ try{ localStorage.setItem('mkseed_diag_promo_v1', v); }catch(e){} }
+  _loadClassList(){
+    try{
+      var raw=localStorage.getItem('mkseed_diag_classlist_v1');
+      if(raw){ var list=JSON.parse(raw); if(Array.isArray(list) && list.length) return list; }
+    }catch(e){}
+    return CLASSES.map(function(c){ return {name:c[0], time:c[1]}; });
+  }
+  _persistClassList(list){ try{ localStorage.setItem('mkseed_diag_classlist_v1', JSON.stringify(list)); }catch(e){} }
+  _loadAiCfg(){
+    try{
+      var raw=localStorage.getItem('mkseed_diag_aicfg_v1');
+      if(raw) return Object.assign({apiKey:'',baseUrl:'https://api.deepseek.com',model:'deepseek-chat'}, JSON.parse(raw));
+    }catch(e){}
+    return {apiKey:'', baseUrl:'https://api.deepseek.com', model:'deepseek-chat'};
+  }
+  _persistAiCfg(cfg){ try{ localStorage.setItem('mkseed_diag_aicfg_v1', JSON.stringify(cfg)); }catch(e){} }
+
+  componentDidMount(){
+    var self=this;
+    this._afterPrintHandler = function(){
+      self._restoreTitle();
+      clearTimeout(self._printFallback);
+      if(self._printQueue && self._printQueuePos < self._printQueue.length-1){
+        self._printQueuePos++;
+        self.setState({printing:false});
+        setTimeout(function(){ self._runPrintQueueStep(); }, 400);
+      } else if(self._printQueue){
+        var batchMode=self._printBatchMode;
+        var skippedMsg = self._printSkipped && self._printSkipped.length ? ('，跳过 '+self._printSkipped.length+' 人：'+self._printSkipped.join('、')) : '';
+        self._printQueue=null;
+        self.setState({printing:false, mode: batchMode?'form':'report', printIncludeInternal:false,
+          status:(batchMode?'批量打印完成':'打印完成')+skippedMsg, statusColor:'#15803d'});
+      } else {
+        self.setState({printing:false});
+      }
+    };
+    window.addEventListener('afterprint', this._afterPrintHandler);
+    this._ensureLogos();
+    var s=this.state, b=s.batches[s.activeBatch];
+    if(b && b._day && b._day!==todayKey() && b.students.some(function(x){return x.name.trim();})){
+      this.setState({showCrossDay:true});
+    }
+  }
+  _ensureLogos(){
+    var self=this;
+    if(this._logosPromise) return this._logosPromise;
+    this._logosPromise = new Promise(function(resolve){
+      var mark=new Image(), lockup=new Image(), n=0;
+      function done(){ n++; if(n===2) resolve(); }
+      mark.onload=done; mark.onerror=done; lockup.onload=done; lockup.onerror=done;
+      mark.src='assets/logo-mark.png'; lockup.src='assets/logo-lockup.png';
+      self._logoMark=mark; self._logoLockup=lockup;
+    });
+    return this._logosPromise;
+  }
+  componentWillUnmount(){
+    window.removeEventListener('afterprint', this._afterPrintHandler);
+    clearTimeout(this._printFallback);
+  }
+
+  _load(){
+    try{
+      var raw = localStorage.getItem('mkseed_diag_v3');
+      if(!raw) return null;
+      var data = JSON.parse(raw);
+      if(!data || !Array.isArray(data.batches) || !data.batches.length) return null;
+      return {
+        batches:data.batches, activeBatch:data.activeBatch||0, activeStudent:data.activeStudent||0,
+        mode:'form', printing:false, showHistory:false, showCrossDay:false, batchEditOpen:false,
+        status:'', statusColor:'', exportBusy:false, printIncludeInternal:false,
+        addingMod:false, newModDraft:''
+      };
+    }catch(e){ return null; }
+  }
+  _persist(state){
+    try{
+      localStorage.setItem('mkseed_diag_v3', JSON.stringify({batches:state.batches, activeBatch:state.activeBatch, activeStudent:state.activeStudent}));
+    }catch(e){}
+  }
+  _cloneBatches(s){
+    return s.batches.map(function(b){
+      var nb = Object.assign({}, b);
+      nb.students = b.students.map(function(st){
+        var ns=Object.assign({}, st);
+        ns.mods = st.mods.slice();
+        ns.rates = st.rates.slice();
+        ns.skills = st.skills.map(function(x){ return Object.assign({}, x); });
+        return ns;
+      });
+      return nb;
+    });
+  }
+  _mutate(fn){
+    var self=this;
+    this.setState(function(s){
+      var partial = fn(s) || {};
+      var merged = Object.assign({}, s, partial);
+      self._persist(merged);
+      return partial;
+    });
+  }
+  _withStudent(fn){
+    this._mutate(function(s){
+      var batches=this._cloneBatches(s);
+      var stu = batches[s.activeBatch].students[s.activeStudent];
+      fn(stu);
+      return {batches:batches};
+    }.bind(this));
+  }
+
+  setBatchField(key,v){ this._mutate(function(s){ var batches=this._cloneBatches(s); batches[s.activeBatch][key]=v; return {batches:batches}; }.bind(this)); }
+  toggleBatchEdit(){ this._mutate(function(s){ return {batchEditOpen: !s.batchEditOpen}; }); }
+  toggleHistory(){ this._mutate(function(s){ return {showHistory: !s.showHistory}; }); }
+  dismissCrossDay(){ this._mutate(function(){ return {showCrossDay:false}; }); }
+  switchBatch(i){ this._mutate(function(){ return {activeBatch:i, activeStudent:0, mode:'form', showHistory:false}; }); }
+  removeBatch(i){
+    this._mutate(function(s){
+      if(s.batches.length<=1) return {};
+      var batches=this._cloneBatches(s);
+      batches.splice(i,1);
+      var activeBatch=s.activeBatch;
+      if(i===activeBatch) activeBatch=Math.max(0,i-1);
+      else if(i<activeBatch) activeBatch=activeBatch-1;
+      return {batches:batches, activeBatch:activeBatch, activeStudent:0, mode:'form'};
+    }.bind(this));
+  }
+  startNewBatch(){
+    this._mutate(function(s){
+      var batches=this._cloneBatches(s).concat([emptyBatch(this.props.defaultChartType)]);
+      return {batches:batches, activeBatch:batches.length-1, activeStudent:0, mode:'form', showCrossDay:false, showHistory:false};
+    }.bind(this));
+  }
+  toggleClassSettings(){ this._mutate(function(s){ return {showClassSettings: !s.showClassSettings}; }); }
+  updateClassField(i,key,v){
+    this._mutate(function(s){
+      var list=s.classList.map(function(c){ return Object.assign({},c); });
+      list[i][key]=v;
+      this._persistClassList(list);
+      return {classList:list};
+    }.bind(this));
+  }
+  addClassRow(){
+    this._mutate(function(s){
+      var list=s.classList.map(function(c){ return Object.assign({},c); }).concat([{name:'',time:''}]);
+      this._persistClassList(list);
+      return {classList:list};
+    }.bind(this));
+  }
+  removeClassRow(i){
+    this._mutate(function(s){
+      var list=s.classList.slice(); list.splice(i,1);
+      if(!list.length) list=[{name:'',time:''}];
+      this._persistClassList(list);
+      return {classList:list};
+    }.bind(this));
+  }
+  resetClassList(){
+    this._mutate(function(){
+      var list=CLASSES.map(function(c){ return {name:c[0],time:c[1]}; });
+      this._persistClassList(list);
+      return {classList:list};
+    }.bind(this));
+  }
+  toggleAiSettings(){ this._mutate(function(s){ return {showAiSettings: !s.showAiSettings}; }); }
+  togglePromoSettings(){ this._mutate(function(s){ return {showPromoSettings: !s.showPromoSettings}; }); }
+  setPromoText(v){ this._mutate(function(){ this._persistPromoText(v); return {promoText:v}; }.bind(this)); }
+  resetPromoText(){ this._mutate(function(){ this._persistPromoText(PROMO_DEFAULT); return {promoText:PROMO_DEFAULT}; }.bind(this)); }
+  setAiCfgField(key,v){
+    this._mutate(function(s){
+      var cfg=Object.assign({},s.aiCfg); cfg[key]=v;
+      this._persistAiCfg(cfg);
+      return {aiCfg:cfg};
+    }.bind(this));
+  }
+  _curStudent(){ var s=this.state; return s.batches[s.activeBatch].students[s.activeStudent]; }
+  _aiPolish(fieldKey, text, hint, onDone){
+    var cfg=this.state.aiCfg;
+    if(!cfg.apiKey){ this.setState({status:'请先设置 AI 润色的 API Key', statusColor:'#991b1b', showAiSettings:true}); return; }
+    if(!text || !text.trim()){ this.setState({status:'请先填写内容，再使用 AI 润色', statusColor:'#991b1b'}); return; }
+    var self=this;
+    this.setState({aiBusyField:fieldKey, status:'AI 润色中…', statusColor:'#6B7280'});
+    var url=(cfg.baseUrl||'https://api.deepseek.com').replace(/\/+$/,'')+'/chat/completions';
+    fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.apiKey},
+      body:JSON.stringify({
+        model:cfg.model||'deepseek-chat',
+        messages:[
+          {role:'system',content:'你是少儿科创工坊的教务写作助手。请在不改变事实、不夸大、不新增信息的前提下，把老师填写的内容润色为更专业通顺、适合直接印在家长报告里的中文表达。'+(hint||'')+' 只输出润色后的正文，不要加引号、前缀或任何解释。'},
+          {role:'user',content:text}
+        ],
+        temperature:0.4
+      })
+    }).then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    }).then(function(data){
+      var out = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+      if(!out) throw new Error('返回内容为空');
+      onDone(out.trim());
+      self.setState({aiBusyField:null, status:'AI 润色完成', statusColor:'#15803d'});
+    }).catch(function(err){
+      self.setState({aiBusyField:null, status:'AI 润色失败：'+err.message+'（如为跨域限制，请联系技术支持配置代理）', statusColor:'#991b1b'});
+    });
+  }
+  polishObs1(){ this._aiPolish('obs1', this._curStudent().obs1, '这是"课堂具体表现"记录，请保留具体事件细节，不要改成空泛评价。', this.setObs1.bind(this)); }
+  polishObs2(){ this._aiPolish('obs2', this._curStudent().obs2, '这是"下一步成长建议"，请保持具体可执行。', this.setObs2.bind(this)); }
+  polishReason(){ this._aiPolish('reason', this._curStudent().reason, '这是"推荐理由"，需引用具体课堂行为，不要空泛。', this.setReason.bind(this)); }
+  polishSkill(i){ this._aiPolish('skill'+i, this._curStudent().skills[i].p, '这是一条具体技能点描述，请保持简短精炼，一句话以内。', function(out){ this.setSkillPoint(i,out); }.bind(this)); }
+  polishPromo(){ this._aiPolish('promo', this.state.promoText, '这是印在报告底部的秋季班优惠文案，价格、日期、电话等具体信息不能改动或编造，只优化语句通顺度和措辞。', this.setPromoText.bind(this)); }
+  selectStudent(i){ this._mutate(function(){ return {activeStudent:i, mode:'form'}; }); }
+  addStudent(){
+    this._mutate(function(s){
+      var batches=this._cloneBatches(s);
+      var list=batches[s.activeBatch].students;
+      var prev=list[list.length-1];
+      var ns=emptyStudent(prev, this.props.defaultChartType);
+      list.push(ns);
+      return {batches:batches, activeStudent:list.length-1, mode:'form'};
+    }.bind(this));
+  }
+  removeStudent(i){
+    this._mutate(function(s){
+      var batches=this._cloneBatches(s);
+      var list=batches[s.activeBatch].students;
+      if(list.length<=1) return {};
+      list.splice(i,1);
+      var ai=Math.min(s.activeStudent, list.length-1);
+      return {batches:batches, activeStudent:ai};
+    }.bind(this));
+  }
+
+  toggleMod(m){ this._withStudent(function(stu){ var i=stu.mods.indexOf(m); if(i>=0) stu.mods.splice(i,1); else stu.mods.push(m); }); }
+  toggleAddMod(){ this._mutate(function(s){ return {addingMod: !s.addingMod, newModDraft:''}; }); }
+  setNewModDraft(v){ this._mutate(function(){ return {newModDraft:v}; }); }
+  confirmAddMod(){
+    var draft=(this.state.newModDraft||'').trim();
+    if(!draft){ this._mutate(function(){ return {addingMod:false}; }); return; }
+    this._withStudent(function(stu){
+      if(stu.customMods.indexOf(draft)<0) stu.customMods.push(draft);
+      if(stu.mods.indexOf(draft)<0) stu.mods.push(draft);
+    });
+    this._mutate(function(){ return {addingMod:false, newModDraft:''}; });
+  }
+  setChart(c){ this._withStudent(function(stu){ stu.chart=c; }); }
+  setRate(i,v){ this._withStudent(function(stu){ stu.rates[i] = stu.rates[i]===v ? 0 : v; }); }
+  setSkillModule(i,v){ this._withStudent(function(stu){ stu.skills[i].m=v; }); }
+  setSkillPoint(i,v){ this._withStudent(function(stu){ stu.skills[i].p=v; }); }
+  setSkillRate(i,v){ this._withStudent(function(stu){ stu.skills[i].r = stu.skills[i].r===v ? 0 : v; }); }
+  setName(v){ this._withStudent(function(stu){ stu.name=v; }); }
+  setGrade(v){ this._withStudent(function(stu){ stu.grade=v; }); }
+  setSlot(v){ this._withStudent(function(stu){ stu.slot=v; }); }
+  setSlotPreset(v){ this._withStudent(function(stu){
+    if(v==='__custom__'){ stu.slotCustom=true; stu.slot=''; }
+    else { stu.slotCustom=false; stu.slot=v; }
+  }); }
+  setObs1(v){ this._withStudent(function(stu){ stu.obs1=v; }); }
+  setObs2(v){ this._withStudent(function(stu){ stu.obs2=v; }); }
+  setDir(i){ this._withStudent(function(stu){ stu.dir=i; }); }
+  setDirCustomField(key,v){ this._withStudent(function(stu){ if(!stu.dirCustom) stu.dirCustom={name:'',desc:''}; stu.dirCustom[key]=v; if(key==='name' && v.trim()) stu.dir=4; }); }
+  setReason(v){ this._withStudent(function(stu){ stu.reason=v; }); }
+  setClassIndex(v){ this._withStudent(function(stu){ stu.classIndex=v; }); }
+  setInternal(key,v){ this._withStudent(function(stu){ stu[key]=v; }); }
+
+  _validate(stu){
+    var errs=[];
+    if(!stu.name.trim()) errs.push('学员姓名');
+    if(stu.dir<0) errs.push('推荐方向');
+    if(stu.classIndex==='') errs.push('建议秋季班级');
+    return errs;
+  }
+  _obsWarnings(stu){
+    var warns=[];
+    var o1=stu.obs1.trim(), o2=stu.obs2.trim();
+    if(o1.length<15) warns.push('「课堂具体表现」过短——少于 15 字通常写不出一个完整场景');
+    if(o2.length<10) warns.push('「成长建议」过短');
+    var lazy=['表现很棒','很有天赋','很感兴趣','非常好','不错','很棒','认真听讲'];
+    if(lazy.some(function(w){ return o1.indexOf(w)>=0 && o1.length<40; })) warns.push('「课堂具体表现」像是套话，请补上具体发生的事');
+    return warns;
+  }
+  generateReport(){
+    var s=this.state;
+    var stu=s.batches[s.activeBatch].students[s.activeStudent];
+    var errs=this._validate(stu);
+    if(errs.length){
+      this.setState({status:'请先补齐：'+errs.join('、'), statusColor:'#991b1b'});
+      return;
+    }
+    this._mutate(function(st){
+      var batches=this._cloneBatches(st);
+      batches[st.activeBatch].students[st.activeStudent].generated=true;
+      return {batches:batches, mode:'report', status:'', statusColor:''};
+    }.bind(this));
+  }
+  backToForm(){ this._mutate(function(){ return {mode:'form'}; }); }
+
+  _filename(stu, batch, variant){
+    var pattern = this.props.filenamePattern || '{name}_{date}_科创体验报告';
+    var dateRaw = (batch.date||'').trim() || todayCompact();
+    var name = (stu.name||'学员').trim();
+    var out = pattern.split('{name}').join(name).split('{date}').join(dateRaw);
+    if(variant==='with') out += '_含内联';
+    else if(variant==='without') out += '_无内联';
+    out = out.replace(/[\\/:*?"<>|]/g,'').trim();
+    return out || '科创体验报告';
+  }
+  _restoreTitle(){ if(this._origTitle!=null){ document.title=this._origTitle; this._origTitle=null; } }
+  _allowInternal(){ return this.props.showInternalSection !== false; }
+  exportPDF(){
+    var s=this.state;
+    var allow=this._allowInternal();
+    this._printQueue = allow ? [{idx:s.activeStudent,internal:false},{idx:s.activeStudent,internal:true}] : [{idx:s.activeStudent,internal:false}];
+    this._printBatchMode=false;
+    this._printSkipped=[];
+    this._printQueuePos=0;
+    this._runPrintQueueStep();
+  }
+  startBatchPrint(){
+    var s=this.state, batch=s.batches[s.activeBatch];
+    var self=this, valid=[], skipped=[];
+    batch.students.forEach(function(stu,i){
+      var errs=self._validate(stu);
+      if(errs.length) skipped.push(stu.name||('学生'+(i+1))); else valid.push(i);
+    });
+    if(!valid.length){ this.setState({status:'没有可打印的学生——请先补齐必填项', statusColor:'#991b1b'}); return; }
+    var allow=this._allowInternal();
+    var queue=[];
+    valid.forEach(function(i){ queue.push({idx:i,internal:false}); if(allow) queue.push({idx:i,internal:true}); });
+    this._printQueue=queue; this._printBatchMode=true; this._printSkipped=skipped; this._printQueuePos=0;
+    this._runPrintQueueStep();
+  }
+  _runPrintQueueStep(){
+    var self=this;
+    var step=this._printQueue[this._printQueuePos];
+    this._mutate(function(st){
+      var batches=self._cloneBatches(st);
+      batches[st.activeBatch].students[step.idx].generated=true;
+      return {batches:batches, activeStudent:step.idx, mode:'report', printIncludeInternal:step.internal,
+        status:'打印中（'+(self._printQueuePos+1)+'/'+self._printQueue.length+'）', statusColor:'#6B7280'};
+    });
+    setTimeout(function(){ self._printOnce(step.idx, step.internal); }, 250);
+  }
+  _printOnce(idx, internal){
+    var s=this.state, batch=s.batches[s.activeBatch], stu=batch.students[idx];
+    this._origTitle=document.title;
+    document.title=this._filename(stu, batch, this._allowInternal() ? (internal?'with':'without') : null);
+    this.setState({printing:true});
+    setTimeout(function(){ window.print(); }, 80);
+    var self=this;
+    clearTimeout(this._printFallback);
+    this._printFallback=setTimeout(function(){ self._restoreTitle(); self.setState({printing:false}); }, 4000);
+  }
+
+  _wrapLines(ctx, text, maxWidth){
+    var lines=[], cur='';
+    for(var i=0;i<text.length;i++){
+      var ch=text[i];
+      if(ch==='\n'){ lines.push(cur); cur=''; continue; }
+      var t=cur+ch;
+      if(cur && ctx.measureText(t).width>maxWidth){ lines.push(cur); cur=ch; } else cur=t;
+    }
+    lines.push(cur);
+    return lines;
+  }
+  _roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+  _sectionTitle(ctx,text,x,y,w){
+    ctx.fillStyle='#0F3ED2';
+    ctx.fillRect(x,y,3,13);
+    ctx.font='800 13px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    ctx.fillText(text, x+9, y+11);
+    var tw = ctx.measureText(text).width;
+    ctx.strokeStyle='#E7EBF3'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x+16+tw, y+6.5); ctx.lineTo(x+w, y+6.5); ctx.stroke();
+    return y+24;
+  }
+  _downloadStudentImage(stu, batch, internal, cb){
+    try{
+      var W=794,H=1123,SCALE=2.2;
+      var canvas=document.createElement('canvas');
+      canvas.width=Math.round(W*SCALE); canvas.height=Math.round(H*SCALE);
+      var ctx=canvas.getContext('2d');
+      ctx.scale(SCALE,SCALE);
+      this._drawReportCanvas(ctx, W, H, stu, batch, this._logoMark, this._logoLockup, internal);
+      var self=this;
+      canvas.toBlob(function(pngBlob){
+        if(!pngBlob){ cb(false); return; }
+        var filename=self._filename(stu, batch, self._allowInternal() ? (internal?'with':'without') : null);
+        var a=document.createElement('a');
+        a.href=URL.createObjectURL(pngBlob);
+        a.download=filename+'.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        cb(true);
+      }, 'image/png');
+    }catch(e){ console.error('[downloadStudentImage] failed', e); cb(false); }
+  }
+  exportImage(){
+    var s=this.state, batch=s.batches[s.activeBatch], stu=batch.students[s.activeStudent];
+    var allow=this._allowInternal();
+    this.setState({exportBusy:true, status:'正在生成图片…', statusColor:'#6B7280'});
+    var self=this;
+    this._ensureLogos().then(function(){
+      self._downloadStudentImage(stu, batch, false, function(ok1){
+        if(!allow){
+          self.setState({exportBusy:false, status: ok1?'图片已生成':'图片生成失败，请改用「打印/存PDF」', statusColor: ok1?'#15803d':'#991b1b'});
+          return;
+        }
+        setTimeout(function(){
+          self._downloadStudentImage(stu, batch, true, function(ok2){
+            var ok=ok1&&ok2;
+            self.setState({exportBusy:false, status: ok?'已生成 2 个图片文件（含/不含内联）':'部分图片生成失败，请改用「打印/存PDF」', statusColor: ok?'#15803d':'#991b1b'});
+          });
+        }, 400);
+      });
+    });
+  }
+  exportAllImages(){
+    var s=this.state, batch=s.batches[s.activeBatch];
+    var self=this, valid=[], skipped=[];
+    batch.students.forEach(function(stu,i){
+      var errs=self._validate(stu);
+      if(errs.length) skipped.push(stu.name||('学生'+(i+1))); else valid.push(i);
+    });
+    if(!valid.length){ this.setState({status:'没有可导出的学生——请先补齐必填项', statusColor:'#991b1b'}); return; }
+    var allow=this._allowInternal();
+    var steps=[];
+    valid.forEach(function(i){ steps.push({idx:i,internal:false}); if(allow) steps.push({idx:i,internal:true}); });
+    this.setState({exportBusy:true, status:'正在批量生成图片…（0/'+steps.length+'）', statusColor:'#6B7280'});
+    this._ensureLogos().then(function(){
+      var i=0;
+      function next(){
+        if(i>=steps.length){
+          var msg='已生成 '+steps.length+' 张图片（'+valid.length+' 位学生）';
+          if(skipped.length) msg += '，跳过：'+skipped.join('、');
+          self.setState({exportBusy:false, status:msg, statusColor: skipped.length? '#b45309':'#15803d'});
+          self._mutate(function(st){
+            var batches=self._cloneBatches(st);
+            valid.forEach(function(vi){ batches[st.activeBatch].students[vi].generated=true; });
+            return {batches:batches};
+          });
+          return;
+        }
+        var step=steps[i];
+        var stu=batch.students[step.idx];
+        self.setState({status:'正在批量生成图片…（'+(i+1)+'/'+steps.length+'）'});
+        self._downloadStudentImage(stu, batch, step.internal, function(){
+          i++;
+          setTimeout(next, 450);
+        });
+      }
+      next();
+    });
+  }
+  _drawReportCanvas(ctx, W, H, stu, batch, markImg, lockupImg, internal){
+    var BRAND='#0F3ED2', INK='#0A0A0A', INK3='#6B7280', LINE='#E7EBF3', BLINE='#A9BFF3', SOFT='#EEF3FF';
+    var MX=45, x=MX, w=W-MX*2, y=38;
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+    if(markImg && markImg.complete && markImg.naturalWidth){
+      ctx.save(); ctx.globalAlpha=0.05;
+      var mw=510, mh=mw*markImg.naturalHeight/markImg.naturalWidth;
+      ctx.drawImage(markImg, W/2-mw/2, H*0.52-mh/2, mw, mh);
+      ctx.restore();
+    }
+    ctx.textBaseline='alphabetic';
+    if(lockupImg && lockupImg.complete && lockupImg.naturalWidth){
+      var lh=43, lw=lh*lockupImg.naturalWidth/lockupImg.naturalHeight;
+      ctx.drawImage(lockupImg, x, y, lw, lh);
+    }
+    ctx.fillStyle=INK; ctx.font='800 20px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.textAlign='left';
+    ctx.fillText('科创体验报告', x, y+65);
+    ctx.fillStyle=INK3; ctx.font='400 11px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('秋日科创体验专场 · 结课综合评价　｜　'+(stu.name||'—')+'　同学', x, y+81);
+    ctx.textAlign='right';
+    ctx.fillStyle=BRAND; ctx.font='800 13px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('MAKERSEED · 种子创客工坊', x+w, y+13);
+    ctx.fillStyle=INK3; ctx.font='400 10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('江门市市级科普教育基地', x+w, y+27);
+    ctx.fillText('深耕青少年科创教育 8 年', x+w, y+40);
+    ctx.textAlign='left';
+    y += 92;
+    ctx.strokeStyle=BRAND; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.stroke();
+    y += 16;
+
+    var cellW=w/3, cellH=32;
+    var info=[['学员姓名',stu.name||'—'],['年级',stu.grade||'—'],['体验日期',batch.date||'—'],
+      ['批次 / 时段',stu.slot||'—'],['授课教师',batch.teacher||'—'],['报告日期',batch.fillDate||'—']];
+    ctx.strokeStyle=LINE; ctx.lineWidth=1;
+    ctx.strokeRect(x+0.5,y+0.5,w-1,cellH*2-1);
+    for(var r=0;r<2;r++){
+      for(var c=0;c<3;c++){
+        var cx=x+c*cellW, cy=y+r*cellH;
+        if(c<2){ ctx.beginPath(); ctx.moveTo(cx+cellW,cy); ctx.lineTo(cx+cellW,cy+cellH); ctx.stroke(); }
+        if(r===0){ ctx.beginPath(); ctx.moveTo(cx,cy+cellH); ctx.lineTo(cx+cellW,cy+cellH); ctx.stroke(); }
+        var item=info[r*3+c];
+        ctx.fillStyle=INK3; ctx.font='400 8.5px "PingFang SC","Microsoft YaHei",sans-serif';
+        ctx.fillText(item[0], cx+9, cy+13);
+        ctx.fillStyle=INK; ctx.font='700 12px "PingFang SC","Microsoft YaHei",sans-serif';
+        ctx.fillText(item[1], cx+9, cy+26);
+      }
+    }
+    y += cellH*2+14;
+
+    y = this._sectionTitle(ctx,'一、本次体验模块',x,y,w);
+    ctx.font='600 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    var mx=x, my=y;
+    var modsToShow = stu.mods.length? stu.mods : ['未勾选'];
+    modsToShow.forEach(function(m){
+      var tw=ctx.measureText(m).width+18;
+      if(mx+tw>x+w){ mx=x; my+=20; }
+      ctx.fillStyle = stu.mods.length? SOFT:'#fff';
+      this._roundRect(ctx,mx,my,tw,17,8); ctx.fill();
+      ctx.strokeStyle = stu.mods.length? BLINE:'#D3D9E5'; ctx.stroke();
+      ctx.fillStyle = stu.mods.length? BRAND:INK3;
+      ctx.fillText(m, mx+9, my+12);
+      mx += tw+6;
+    }.bind(this));
+    y = my+29;
+
+    y = this._sectionTitle(ctx,'二、课堂表现总评',x,y,w);
+    var RLAB=['正在起步','稳步提升','达标','良好','突出'];
+    var DIMS=[['动手实践','操作器材熟练，能独立完成作品与任务'],['理解表达','听懂课堂知识，能讲出作品原理与思路'],
+      ['专注投入','遇到困难主动尝试，不轻易求助或放弃'],['创意想法','有自己的想法，敢于改造或提出新方案'],
+      ['合作习惯','愿意配合分享，遵守课堂秩序与安全规范']];
+    var rowH=20;
+    DIMS.forEach(function(d,i){
+      var v=stu.rates[i]||0, ry=y+i*rowH;
+      ctx.fillStyle=INK; ctx.font='700 11.5px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText(d[0], x, ry+13);
+      ctx.fillStyle=INK3; ctx.font='400 9px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText(d[1], x+68, ry+13);
+      var barX=x+w-220, barW=150;
+      ctx.strokeStyle=LINE; ctx.fillStyle='#f5f5f4';
+      this._roundRect(ctx,barX,ry+3,barW,10,5); ctx.fill(); ctx.stroke();
+      if(v>0){ ctx.fillStyle=BRAND; this._roundRect(ctx,barX,ry+3,barW*v/5,10,5); ctx.fill(); }
+      ctx.fillStyle=BRAND; ctx.font='800 10px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.textAlign='right';
+      ctx.fillText(v?RLAB[v-1]:'—', x+w, ry+12); ctx.textAlign='left';
+    }.bind(this));
+    y += DIMS.length*rowH+14;
+
+    y = this._sectionTitle(ctx,'三、模块技能掌握',x,y,w);
+    var sk = stu.skills.filter(function(k){return k.m||k.p;});
+    if(!sk.length){
+      ctx.fillStyle=INK3; ctx.font='400 10px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('本次未记录单项技能', x, y+10); y+=22;
+    } else {
+      sk.forEach(function(k){
+        ctx.fillStyle=INK; ctx.font='700 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+        ctx.fillText(k.m||'—', x, y+11);
+        ctx.fillStyle='#262626'; ctx.font='400 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+        ctx.fillText(k.p||'', x+120, y+11);
+        for(var d=0;d<5;d++){
+          ctx.beginPath(); ctx.arc(x+w-140+d*14, y+7, 4.5, 0, Math.PI*2);
+          if(d<k.r){ ctx.fillStyle=BRAND; ctx.fill(); } else { ctx.strokeStyle=BLINE; ctx.lineWidth=1.2; ctx.stroke(); }
+        }
+        ctx.fillStyle=BRAND; ctx.font='800 10px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.textAlign='right';
+        ctx.fillText(k.r?RLAB[k.r-1]:'—', x+w, y+11); ctx.textAlign='left';
+        y += 18;
+      });
+      y += 6;
+    }
+
+    y = this._sectionTitle(ctx,'四、老师观察记录',x,y,w);
+    ctx.strokeStyle=LINE;
+    var obs1Lines=this._wrapLines(ctx,'课堂上的具体表现',9999);
+    ctx.font='700 10.5px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle='#262626';
+    ctx.fillText('课堂上的具体表现', x+8, y+13);
+    ctx.font='400 11px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle=INK;
+    var l1=this._wrapLines(ctx, stu.obs1||'—', w-16);
+    l1.forEach(function(ln,i){ ctx.fillText(ln, x+8, y+30+i*16); });
+    var y2=y+30+l1.length*16+8;
+    ctx.font='700 10.5px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle='#262626';
+    ctx.fillText('下一步的成长建议', x+8, y2+13);
+    ctx.font='400 11px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle=INK;
+    var l2=this._wrapLines(ctx, stu.obs2||'—', w-16);
+    l2.forEach(function(ln,i){ ctx.fillText(ln, x+8, y2+30+i*16); });
+    var boxBottom = y2+30+l2.length*16+6;
+    ctx.strokeRect(x+0.5,y+0.5,w-1,boxBottom-y-1);
+    y = boxBottom+14;
+
+    var DIRS=[['机器人','结构 · 搭建 · 操控'],['编程','逻辑 · 算法 · 调试'],['创客造物','设计 · 建模 · 制作'],['AI / 竞赛','进阶 · 项目 · 参赛']];
+    var dirsToShow=DIRS.slice();
+    if(stu.dirCustom && stu.dirCustom.name) dirsToShow.push([stu.dirCustom.name, stu.dirCustom.desc||'']);
+    ctx.font='800 11px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle=BRAND;
+    ctx.fillText('五、方向推荐', x, y+11);
+    var boxTop=y+20;
+    var dW=(w-16-(dirsToShow.length-1)*8)/dirsToShow.length;
+    var dirRowBottom=boxTop+14+48;
+    dirsToShow.forEach(function(d,i){
+      var dx=x+8+i*(dW+8);
+      var on=stu.dir===i;
+      ctx.fillStyle='#fff'; this._roundRect(ctx,dx,boxTop+8,dW,44,5); ctx.fill();
+      ctx.strokeStyle= on? BRAND:'#D3D9E5'; ctx.lineWidth= on?2.2:1.2; this._roundRect(ctx,dx,boxTop+8,dW,44,5); ctx.stroke();
+      ctx.textAlign='center';
+      ctx.fillStyle= on? BRAND:INK3; ctx.font='800 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText((on?'✓ ':'')+d[0], dx+dW/2, boxTop+26);
+      ctx.fillStyle= on? '#2456E8':'#9AA3B2'; ctx.font='400 8px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText(d[1], dx+dW/2, boxTop+38);
+      ctx.textAlign='left';
+    }.bind(this));
+    var reasonY=dirRowBottom+14;
+    ctx.font='400 10.5px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle=INK;
+    ctx.font='800 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('推荐理由：', x+8, reasonY);
+    var reasonLabelW=ctx.measureText('推荐理由：').width;
+    ctx.font='400 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    var rl=this._wrapLines(ctx, stu.reason||'—', w-16-reasonLabelW);
+    rl.forEach(function(ln,i){ ctx.fillText(ln, x+8+(i===0?reasonLabelW:0), reasonY+i*15); });
+    var classY = reasonY + rl.length*15+16;
+    var className = stu.classIndex!=='' ? this._classInfo(stu.classIndex)[0] : '—';
+    var classTime = stu.classIndex!=='' ? this._classInfo(stu.classIndex)[1] : '—';
+    ctx.font='800 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('建议班级：', x+8, classY);
+    ctx.font='400 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText(className, x+8+ctx.measureText('建议班级：').width, classY);
+    ctx.font='800 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('上课时间：', x+w/2, classY);
+    ctx.font='400 10.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText(classTime, x+w/2+ctx.measureText('上课时间：').width, classY);
+    var vBoxBottom = classY+12;
+    ctx.strokeStyle=BRAND; ctx.lineWidth=2; this._roundRect(ctx,x,y-14,w,vBoxBottom-(y-14),7); ctx.stroke();
+    ctx.fillStyle=SOFT; ctx.save(); ctx.globalAlpha=0.5; this._roundRect(ctx,x,y-14,w,vBoxBottom-(y-14),7); ctx.fill(); ctx.restore();
+    y = vBoxBottom+16;
+
+    ctx.font='400 9.5px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle='#262626';
+    var blurb=this.state.promoText||PROMO_DEFAULT;
+    var bl=this._wrapLines(ctx, blurb, w-16);
+    bl.forEach(function(ln,i){ ctx.fillText(ln, x+8, y+13+i*14); });
+    var blurbBottom=y+13+bl.length*14+6;
+    ctx.strokeStyle=BLINE; ctx.setLineDash([4,3]); this._roundRect(ctx,x,y,w,blurbBottom-y,5); ctx.stroke(); ctx.setLineDash([]);
+    y = blurbBottom+16;
+
+    ctx.strokeStyle=LINE; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.stroke();
+    ctx.fillStyle=INK3; ctx.font='400 9.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('授课教师', x, y+16);
+    ctx.fillStyle=INK; ctx.font='600 9.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText(batch.teacher||'　', x+48, y+16);
+    ctx.fillStyle=INK3; ctx.font='400 9.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('日期', x+150, y+16);
+    ctx.fillStyle=INK; ctx.font='600 9.5px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText(batch.fillDate||'　', x+180, y+16);
+    ctx.fillStyle=INK3; ctx.textAlign='right';
+    ctx.fillText('种子创客工坊 · 结课评价', x+w, y+16);
+    ctx.textAlign='left';
+    y += 30;
+    if(internal){
+      ctx.strokeStyle='#6B7280'; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.stroke(); ctx.setLineDash([]);
+      y += 14;
+      ctx.fillStyle=INK3; ctx.font='700 8.5px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillText('— — — 以下为工坊内部记录，不面向家长 — — —', x, y); y+=16;
+      ctx.font='400 9.5px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle='#262626';
+      ctx.fillText('家长到场：'+stu.attendp+'　　现场沟通：'+stu.talk+'　　报名意向：'+stu.intent+'　　未成交原因：'+(stu.why||'—'), x, y); y+=15;
+      ctx.fillText('推荐人：'+(stu.ref||'—')+'　　下次跟进：'+(stu.follow||'—'), x, y); y+=15;
+      var noteLines=this._wrapLines(ctx, '顾问备注：'+(stu.note||'—'), w);
+      noteLines.forEach(function(ln){ ctx.fillText(ln, x, y); y+=15; });
+    }
+  }
+  _classInfo(idx){
+    var c=this.state.classList[Number(idx)];
+    return c ? [c.name,c.time] : ['—','—'];
+  }
+
+  _chipStyle(on){
+    return on
+      ? 'font-size:15.2px;padding:10px 16px;border-radius:20px;border:1.5px solid #0F3ED2;background:#EEF3FF;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-block;'
+      : 'font-size:15.2px;padding:10px 16px;border-radius:20px;border:1.5px solid #D3D9E5;background:#fff;color:#262626;font-weight:500;cursor:pointer;white-space:nowrap;display:inline-block;';
+  }
+  _chartChipStyle(on){
+    return on
+      ? 'font-size:14.2px;padding:8px 14px;border-radius:16px;border:1.5px solid #0F3ED2;background:#EEF3FF;color:#0F3ED2;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;'
+      : 'font-size:14.2px;padding:8px 14px;border-radius:16px;border:1.5px solid #D3D9E5;background:#fff;color:#262626;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;';
+  }
+  _dotInner(on){
+    return on
+      ? 'width:22px;height:22px;border-radius:50%;background:#0F3ED2;border:2px solid #0F3ED2;'
+      : 'width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #A9BFF3;';
+  }
+  _dotInnerSmall(on){
+    return on
+      ? 'width:18px;height:18px;border-radius:50%;background:#0F3ED2;border:2px solid #0F3ED2;'
+      : 'width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #A9BFF3;';
+  }
+  _tabStyle(on, done){
+    var base='flex-shrink:0;padding:9px 16px;border-radius:20px;font-size:15.2px;font-weight:700;cursor:pointer;white-space:nowrap;border:1.5px solid ';
+    if(on) return base+'#0F3ED2;background:#0F3ED2;color:#fff;';
+    return base+(done ? '#A9BFF3;background:#EEF3FF;color:#0F3ED2;' : '#D3D9E5;background:#fff;color:#262626;');
+  }
+  _dirStyle(on){
+    return on
+      ? 'border:2px solid #0F3ED2;border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;background:#EEF3FF;'
+      : 'border:1.8px solid #D3D9E5;border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;background:#fff;';
+  }
+  _historyRowStyle(on){
+    return on
+      ? 'padding:12px 14px;border-radius:10px;background:#EEF3FF;border:1.5px solid #0F3ED2;cursor:pointer;margin-bottom:8px;'
+      : 'padding:12px 14px;border-radius:10px;background:#fff;border:1.5px solid #E7EBF3;cursor:pointer;margin-bottom:8px;';
+  }
+  _pdStyle(on){
+    return on
+      ? 'display:inline-block;width:11px;height:11px;border-radius:50%;margin-left:4px;vertical-align:-1px;background:#0F3ED2;border:3px solid #0F3ED2;'
+      : 'display:inline-block;width:11px;height:11px;border-radius:50%;margin-left:4px;vertical-align:-1px;border:1.3px solid #A9BFF3;';
+  }
+
+  renderVals(){
+    var self=this;
+    var s=this.state;
+    var batch=s.batches[s.activeBatch];
+    var stu=batch.students[s.activeStudent];
+    var showInternal = s.printing ? !!s.printIncludeInternal : this._allowInternal();
+
+    var allMods = MODULES.concat(stu.customMods||[]);
+    var modsView = allMods.map(function(m){
+      return { name:m, chipStyle:self._chipStyle(stu.mods.indexOf(m)>=0), toggle:function(){ self.toggleMod(m); } };
+    });
+
+    var chartDefs=[['radar','雷达图','五维雷达图 · 家长一眼看出强弱分布'],['bar','横条图','横条图 · 逐项对比清晰，适合打印黑白'],['dot','圆点刻度','圆点刻度 · 最紧凑，适合信息量大的报告']];
+    var chartTypeView = chartDefs.map(function(c){
+      return { key:c[0], label:c[1], chipStyle:self._chartChipStyle(stu.chart===c[0]), select:function(){ self.setChart(c[0]); } };
+    });
+
+    var dimsFormView = DIMS.map(function(d,i){
+      var v=stu.rates[i];
+      return {
+        name:d[0], desc:d[1], label: v? RLAB[v-1] : '—',
+        dots:[1,2,3,4,5].map(function(k){ return { innerStyle:self._dotInner(k<=v), set:function(){ self.setRate(i,k); } }; })
+      };
+    });
+    var filled = stu.rates.filter(function(v){return v>0;}).length;
+    var high = stu.rates.filter(function(v){return v>=4;}).length;
+    var showInflateAlert = filled===5 && high===5;
+
+    var skillsView = [0,1,2].map(function(i){
+      var sk=stu.skills[i];
+      var opts = stu.mods.length ? stu.mods : MODULES.concat(stu.customMods||[]);
+      return {
+        moduleOptions: opts.map(function(m){ return {value:m, label:m}; }),
+        moduleValue: opts.indexOf(sk.m)>=0 ? sk.m : '',
+        onModuleChange: function(e){ self.setSkillModule(i, e.target.value); },
+        point: sk.p,
+        onPointChange: function(e){ self.setSkillPoint(i, e.target.value); },
+        dots:[1,2,3,4,5].map(function(k){ return { innerStyle:self._dotInnerSmall(k<=sk.r), set:function(){ self.setSkillRate(i,k); } }; }),
+        polishLabel: s.aiBusyField===('skill'+i) ? '…' : '✨',
+        polish: function(){ self.polishSkill(i); }
+      };
+    });
+
+    var dirsView = DIRS.map(function(d,i){
+      var on = stu.dir===i;
+      return { name:d[0], desc:d[1], boxStyle:self._dirStyle(on),
+        nameStyle: on? 'font-size:14.7px;font-weight:800;color:#0F3ED2;' : 'font-size:14.7px;font-weight:800;',
+        descStyle: 'font-size:11.2px;color:#6B7280;margin-top:2px;',
+        select:function(){ self.setDir(i); } };
+    });
+    var classOptions = s.classList.map(function(c,i){ return { value:String(i), label:c.name+'　（'+c.time+'）' }; });
+    var classInfoCur = stu.classIndex!=='' ? s.classList[Number(stu.classIndex)] : null;
+    var classTime = classInfoCur ? classInfoCur.time : '';
+    var className = classInfoCur ? classInfoCur.name : '—';
+
+    var obsWarnings = this._obsWarnings(stu);
+    var obsWarningText = obsWarnings.length ? ('⚠ '+obsWarnings.join('；')+'。家长能分辨模板话术——写不出具体行为，说明观察不足。') : '';
+
+    var studentsView = batch.students.map(function(st,i){
+      return { label: st.name.trim() || ('学生'+(i+1)), done: !!st.generated,
+        tabStyle: self._tabStyle(i===s.activeStudent, !!st.generated),
+        select:function(){ self.selectStudent(i); },
+        canDelete: batch.students.length>1,
+        remove:function(e){ if(e&&e.stopPropagation) e.stopPropagation(); if(window.confirm('删除该学生记录？此操作不可恢复。')) self.removeStudent(i); } };
+    });
+
+    var historyView = s.batches.map(function(b,i){
+      var named = b.students.filter(function(x){return x.name.trim();}).length;
+      return { label:(b.date||'未填日期')+' · '+(b.teacher||'未填教师')+'（'+named+'/'+b.students.length+' 人）',
+        rowStyle:self._historyRowStyle(i===s.activeBatch), select:function(){ self.switchBatch(i); },
+        canDelete: s.batches.length>1,
+        remove:function(e){ if(e&&e.stopPropagation) e.stopPropagation(); if(window.confirm('删除该批次记录？此操作不可恢复。')) self.removeBatch(i); } };
+    });
+
+    var radar = radarGeometry(stu.rates);
+    var barView = DIMS.map(function(d,i){
+      var v=stu.rates[i]||0, pct=v/5*100;
+      return { name:d[0], desc:d[1], label: v? RLAB[v-1]:'—',
+        barFillStyle:'display:block;height:100%;background:linear-gradient(90deg,#6D8CEE,#0F3ED2);border-radius:6px;width:'+pct+'%;' };
+    });
+    var dotView = DIMS.map(function(d,i){
+      var v=stu.rates[i]||0;
+      return { name:d[0], desc:d[1], label: v? RLAB[v-1]:'—',
+        dots:[1,2,3,4,5].map(function(k){ return {pdStyle:self._pdStyle(k<=v)}; }) };
+    });
+    var reportMods = stu.mods.map(function(m){ return {name:m}; });
+    var reportSkills = (stu.skills||[]).filter(function(x){ return x && (x.m || x.p); }).map(function(x){
+      return { m:x.m||'—', p:x.p||'', label: x.r ? RLAB[x.r-1] : '—',
+        dots:[1,2,3,4,5].map(function(k){ return {pdStyle:self._pdStyle(k<=x.r)}; }) };
+    });
+    var reportDirs = DIRS.map(function(d,i){
+      var on = stu.dir===i;
+      return { name:d[0], desc:d[1], checkPrefix: on? '✓ ':'',
+        boxStyle: on ? 'flex:1;border:2.5px solid #0F3ED2;border-radius:5px;background:#fff;padding:3.5px 6px;text-align:center;'
+                     : 'flex:1;border:1.2px solid #D3D9E5;border-radius:5px;background:#fff;padding:5px 6px;text-align:center;',
+        nameStyle: on ? 'font-size:11px;font-weight:800;color:#0F3ED2;' : 'font-size:11px;font-weight:700;color:#6B7280;',
+        descStyle: on ? 'font-size:8.5px;color:#2456E8;margin-top:1px;' : 'font-size:8.5px;color:#9AA3B2;margin-top:1px;' };
+    });
+    if(stu.dirCustom && stu.dirCustom.name){
+      var onC = stu.dir===4;
+      reportDirs.push({ name:stu.dirCustom.name, desc:stu.dirCustom.desc||'', checkPrefix: onC?'✓ ':'',
+        boxStyle: onC ? 'flex:1;border:2.5px solid #0F3ED2;border-radius:5px;background:#fff;padding:3.5px 6px;text-align:center;'
+                      : 'flex:1;border:1.2px solid #D3D9E5;border-radius:5px;background:#fff;padding:5px 6px;text-align:center;',
+        nameStyle: onC ? 'font-size:11px;font-weight:800;color:#0F3ED2;' : 'font-size:11px;font-weight:700;color:#6B7280;',
+        descStyle: onC ? 'font-size:8.5px;color:#2456E8;margin-top:1px;' : 'font-size:8.5px;color:#9AA3B2;margin-top:1px;' });
+    }
+
+    var crossDayText = '检测到上次填写是「'+(batch.date||'未填日期')+'」的批次，是否开始新批次？旧批次会保留在本机，可以随时切回去查看或重新导出。';
+    var batchSummary = (batch.date||'未填日期') + (batch.teacher? ' · '+batch.teacher : '');
+
+    return {
+      isFormMode: s.mode==='form', isReportMode: s.mode==='report',
+      printing: s.printing, showHistory: s.showHistory, showCrossDay: s.showCrossDay, batchEditOpen: s.batchEditOpen,
+      status: s.status, statusStyle: 'font-size:13.7px;color:'+(s.statusColor||'#6B7280')+';text-align:center;',
+      crossDayText: crossDayText, batchSummary: batchSummary,
+      batchDate: batch.date, batchTeacher: batch.teacher, batchFillDate: batch.fillDate,
+      onBatchDate:function(e){ self.setBatchField('date', e.target.value); },
+      onBatchTeacher:function(e){ self.setBatchField('teacher', e.target.value); },
+      onBatchFillDate:function(e){ self.setBatchField('fillDate', e.target.value); },
+      toggleBatchEdit:function(){ self.toggleBatchEdit(); },
+      toggleHistory:function(){ self.toggleHistory(); },
+      startNewBatch:function(){ self.startNewBatch(); },
+      dismissCrossDay:function(){ self.dismissCrossDay(); },
+      historyView: historyView,
+      studentsView: studentsView, addStudent:function(){ self.addStudent(); },
+      canDeleteStudent: batch.students.length>1,
+      removeStudent:function(){ self.removeStudent(s.activeStudent); },
+
+      name: stu.name, onName:function(e){ self.setName(e.target.value); },
+      grade: stu.grade, onGrade:function(e){ self.setGrade(e.target.value); },
+      slot: stu.slot, onSlot:function(e){ self.setSlot(e.target.value); },
+      slotPresets: SLOT_PRESETS,
+      slotSelectValue: stu.slotCustom ? '__custom__' : stu.slot,
+      slotShowCustom: !!stu.slotCustom,
+      onSlotSelectChange: function(e){ self.setSlotPreset(e.target.value); },
+
+      modsView: modsView,
+      chartTypeView: chartTypeView,
+      dimsFormView: dimsFormView, showInflateAlert: showInflateAlert,
+      skillsView: skillsView,
+      obs1: stu.obs1, onObs1:function(e){ self.setObs1(e.target.value); },
+      obs2: stu.obs2, onObs2:function(e){ self.setObs2(e.target.value); },
+      showObsWarning: obsWarnings.length>0, obsWarningText: obsWarningText,
+
+      dirsView: dirsView, reason: stu.reason, onReason:function(e){ self.setReason(e.target.value); },
+      classOptions: classOptions, classValue: stu.classIndex, onClassChange:function(e){ self.setClassIndex(e.target.value); },
+      classTime: classTime, showDirAlert: stu.dir<0,
+
+      attendp: stu.attendp, onAttendp:function(e){ self.setInternal('attendp', e.target.value); },
+      talk: stu.talk, onTalk:function(e){ self.setInternal('talk', e.target.value); },
+      intent: stu.intent, onIntent:function(e){ self.setInternal('intent', e.target.value); },
+      why: stu.why, onWhy:function(e){ self.setInternal('why', e.target.value); },
+      ref: stu.ref, onRef:function(e){ self.setInternal('ref', e.target.value); },
+      follow: stu.follow, onFollow:function(e){ self.setInternal('follow', e.target.value); },
+      note: stu.note, onNote:function(e){ self.setInternal('note', e.target.value); },
+
+      generateLabel: stu.generated ? '更新报告' : '一键生成报告',
+      generateReport:function(){ self.generateReport(); },
+      backToForm:function(){ self.backToForm(); },
+      exportPDF:function(){ self.exportPDF(); },
+      exportImage:function(){ self.exportImage(); },
+      pageRef: this.pageRef,
+
+      reportName: stu.name || '—', reportGrade: stu.grade || '—',
+      reportDate: batch.date || '—', reportSlot: stu.slot || '—',
+      reportTeacher: batch.teacher || '—', reportFillDate: batch.fillDate || '—',
+      reportModsEmpty: reportMods.length===0, reportMods: reportMods,
+      isRadar: stu.chart==='radar', isBar: stu.chart==='bar', isDot: stu.chart==='dot',
+      radar: radar, barView: barView, dotView: dotView,
+      reportSkillsEmpty: reportSkills.length===0, reportSkills: reportSkills,
+      reportObs1: stu.obs1 || '—', reportObs2: stu.obs2 || '—',
+      reportDirs: reportDirs, reportReason: stu.reason || '—',
+      reportClassName: className, reportClassTime: classTime || '—',
+      showInternal: showInternal,
+      attendpR: stu.attendp, talkR: stu.talk, intentR: stu.intent,
+      whyR: stu.why || '—', refR: stu.ref || '—', followR: stu.follow || '—', noteR: stu.note || '—',
+
+      canBatchExport: batch.students.length>1, batchStudentCount: batch.students.length,
+      exportAllImages: function(){ self.exportAllImages(); },
+      startBatchPrint: function(){ self.startBatchPrint(); },
+
+      addingMod: s.addingMod, notAddingMod: !s.addingMod, newModDraft: s.newModDraft,
+      onNewModDraft:function(e){ self.setNewModDraft(e.target.value); },
+      confirmAddMod:function(){ self.confirmAddMod(); },
+      toggleAddMod:function(){ self.toggleAddMod(); },
+
+      showClassSettings: s.showClassSettings,
+      toggleClassSettings:function(){ self.toggleClassSettings(); },
+      addClassRow:function(){ self.addClassRow(); },
+      resetClassList:function(){ self.resetClassList(); },
+      classListView: s.classList.map(function(c,i){
+        return { name:c.name, time:c.time,
+          onName:function(e){ self.updateClassField(i,'name',e.target.value); },
+          onTime:function(e){ self.updateClassField(i,'time',e.target.value); },
+          remove:function(){ self.removeClassRow(i); } };
+      }),
+
+      showAiSettings: s.showAiSettings,
+      toggleAiSettings:function(){ self.toggleAiSettings(); },
+      showPromoSettings: s.showPromoSettings,
+      togglePromoSettings:function(){ self.togglePromoSettings(); },
+      resetPromoText:function(){ self.resetPromoText(); },
+      promoText: s.promoText, onPromoText:function(e){ self.setPromoText(e.target.value); },
+      promoPolishLabel: s.aiBusyField==='promo' ? '润色中…' : '✨ AI 润色',
+      polishPromo:function(){ self.polishPromo(); },
+      reportPromoText: s.promoText,
+      aiBaseUrl: s.aiCfg.baseUrl, onAiBaseUrl:function(e){ self.setAiCfgField('baseUrl', e.target.value); },
+      aiApiKey: s.aiCfg.apiKey, onAiApiKey:function(e){ self.setAiCfgField('apiKey', e.target.value); },
+      aiModel: s.aiCfg.model, onAiModel:function(e){ self.setAiCfgField('model', e.target.value); },
+      obs1PolishLabel: s.aiBusyField==='obs1' ? '润色中…' : '✨ AI 润色',
+      obs2PolishLabel: s.aiBusyField==='obs2' ? '润色中…' : '✨ AI 润色',
+      reasonPolishLabel: s.aiBusyField==='reason' ? '润色中…' : '✨ AI 润色',
+      polishObs1:function(){ self.polishObs1(); },
+      polishObs2:function(){ self.polishObs2(); },
+      polishReason:function(){ self.polishReason(); },
+
+      dirCustomName: (stu.dirCustom||{}).name||'', onDirCustomName:function(e){ self.setDirCustomField('name', e.target.value); },
+      dirCustomDesc: (stu.dirCustom||{}).desc||'', onDirCustomDesc:function(e){ self.setDirCustomField('desc', e.target.value); },
+      dirCustomBoxStyle: self._dirStyle(stu.dir===4),
+      selectCustomDir: (stu.dirCustom||{}).name ? function(){ self.setDir(4); } : function(){}
+    };
+  }
+}
+
+</script>
+</body>
+</html>
