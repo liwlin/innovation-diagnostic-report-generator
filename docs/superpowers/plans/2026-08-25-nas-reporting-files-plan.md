@@ -50,7 +50,7 @@ tests/js/report-filename.test.js
 ## Stable Interfaces
 
 ```python
-def report_filename(name: str, date_label: str, variant: Literal["with", "without"] | None, pattern: str) -> str: ...
+def report_filename(name: str, date_label: str, variant: Literal["with", "without"] | None, pattern: str, today_compact: str | None = None) -> str: ...
 
 @dataclass(frozen=True)
 class ReportArtifact:
@@ -88,24 +88,25 @@ POST /api/generations/{generation_id}/retry
 - Consumes: legacy `_filename` behavior.
 - Produces: `MakerSeedReportFilename.build(input)` in JS and `report_filename(...)` in Python.
 
-- [ ] **Step 1: Write a shared fixture with exact edge cases**
+- [x] **Step 1: Write a shared fixture with exact edge cases**
 
 ```json
 [
   {"name":"张三","date":"8月25日","variant":"without","pattern":"{name}_{date}_科创体验报告","expected":"张三_8月25日_科创体验报告_无内联"},
   {"name":"张三","date":"8月25日","variant":"with","pattern":"{name}_{date}_科创体验报告","expected":"张三_8月25日_科创体验报告_含内联"},
   {"name":"A/B:C*D?","date":"2026/08/25","variant":null,"pattern":"{name}_{date}","expected":"ABCD_20260825"},
-  {"name":"","date":"","variant":null,"pattern":"","expected":"科创体验报告"}
+  {"name":"","date":"","today_compact":"20260825","variant":null,"pattern":"","expected":"学员_20260825_科创体验报告"},
+  {"name":"张三","date":"8月25日","variant":null,"pattern":"////","expected":"科创体验报告"}
 ]
 ```
 
 Add cases for quotes, angle brackets, pipe, whitespace, repeated placeholders, custom pattern, and variant `null`.
 
-- [ ] **Step 2: Write failing Node and pytest fixture consumers**
+- [x] **Step 2: Write failing Node and pytest fixture consumers**
 
 The Node test loads `shared/report-filename.js` with `require()` and asserts every fixture. The Python test calls `report_filename` with identical inputs and asserts the same expected values.
 
-- [ ] **Step 3: Run both tests and verify failure**
+- [x] **Step 3: Run both tests and verify failure**
 
 Run:
 
@@ -116,13 +117,13 @@ uv run --project server pytest server/tests/test_report_filename.py -q
 
 Expected: missing module failures.
 
-- [ ] **Step 4: Implement both functions and delegate the HTML method**
+- [x] **Step 4: Implement both functions and delegate the HTML method**
 
 Both implementations must replace all `{name}` and `{date}` occurrences, use `学员` and current compact date only when the corresponding value is blank, append the exact variant suffix, remove `[\\/:*?"<>|]`, trim, and then fall back to `科创体验报告`.
 
 The existing `_filename` body becomes a thin call to `MakerSeedReportFilename.build` so Pages and NAS cannot drift.
 
-- [ ] **Step 5: Run filename and static-site regression tests**
+- [x] **Step 5: Run filename and static-site regression tests**
 
 Run:
 
@@ -134,7 +135,7 @@ pwsh -NoProfile -File tests/verify-static-site.ps1
 
 Expected: all commands pass.
 
-- [ ] **Step 6: Commit the compatibility seam**
+- [x] **Step 6: Commit the compatibility seam**
 
 Stage the shared fixture/functions, tests, and narrow HTML change. Record exact legacy parity and Pages verification in commit trailers.
 

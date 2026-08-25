@@ -1,0 +1,52 @@
+[
+  {
+    "name": "张三",
+    "date": "8月25日",
+    "variant": "without",
+    "pattern": "{name}_{date}_科创体验报告",
+    "expected": "张三_8月25日_科创体验报告_无内联"
+  },
+  {
+    "name": "张三",
+    "date": "8月25日",
+    "variant": "with",
+    "pattern": "{name}_{date}_科创体验报告",
+    "expected": "张三_8月25日_科创体验报告_含内联"
+  },
+  {
+    "name": "A/B:C*D?",
+    "date": "2026/08/25",
+    "variant": null,
+    "pattern": "{name}_{date}",
+    "expected": "ABCD_20260825"
+  },
+  {
+    "name": "",
+    "date": "",
+    "today_compact": "20260825",
+    "variant": null,
+    "pattern": "",
+    "expected": "学员_20260825_科创体验报告"
+  },
+  {
+    "name": "张三",
+    "date": "8月25日",
+    "variant": null,
+    "pattern": "////",
+    "expected": "科创体验报告"
+  },
+  {
+    "name": "  李四  ",
+    "date": "  2026-08-25  ",
+    "variant": "with",
+    "pattern": "{name}-{name}-{date}",
+    "expected": "李四-李四-2026-08-25_含内联"
+  },
+  {
+    "name": "王\"五<六>|",
+    "date": "8*26?",
+    "variant": "without",
+    "pattern": "{date}_{name}",
+    "expected": "826_王五六_无内联"
+  }
+]

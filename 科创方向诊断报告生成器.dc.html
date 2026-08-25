@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>科创体验报告 · 生成器</title>
 <script src="./support.js"></script>
+<script src="./shared/report-filename.js"></script>
 </head>
 <body>
 <x-dc>
@@ -1026,14 +1027,10 @@ class Component extends DCLogic {
   backToForm(){ this._mutate(function(){ return {mode:'form'}; }); }
 
   _filename(stu, batch, variant){
-    var pattern = this.props.filenamePattern || '{name}_{date}_科创体验报告';
-    var dateRaw = (batch.date||'').trim() || todayCompact();
-    var name = (stu.name||'学员').trim();
-    var out = pattern.split('{name}').join(name).split('{date}').join(dateRaw);
-    if(variant==='with') out += '_含内联';
-    else if(variant==='without') out += '_无内联';
-    out = out.replace(/[\\/:*?"<>|]/g,'').trim();
-    return out || '科创体验报告';
+    return MakerSeedReportFilename.build({
+      name:stu.name, date:batch.date, variant:variant,
+      pattern:this.props.filenamePattern, today_compact:todayCompact()
+    });
   }
   _restoreTitle(){ if(this._origTitle!=null){ document.title=this._origTitle; this._origTitle=null; } }
   _allowInternal(){ return this.props.showInternalSection !== false; }

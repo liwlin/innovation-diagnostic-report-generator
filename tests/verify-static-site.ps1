@@ -47,6 +47,7 @@ try {
         '/科创方向诊断报告生成器.dc.html',
         '/support.js',
         '/doc-page.js',
+        '/shared/report-filename.js',
         '/assets/logo-lockup.png',
         '/assets/logo-mark.png'
     )
