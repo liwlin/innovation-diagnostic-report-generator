@@ -58,6 +58,7 @@ def create_evaluation(
     name: str = "张三",
     grade: str = "三年级",
     recommended_class: str = "头脑风暴1.0 V1",
+    payload_changes: dict[str, Any] | None = None,
 ) -> dict:
     actual_batch = batch or create_batch(identity)
     response = identity.client.post(
@@ -65,7 +66,10 @@ def create_evaluation(
         headers={"X-CSRF-Token": identity.csrf},
         json={
             "student": {"name": name, "grade": grade, "slot": "批次1 · 上午场"},
-            "payload": default_payload(recommended_class=recommended_class),
+            "payload": default_payload(
+                recommended_class=recommended_class,
+                **(payload_changes or {}),
+            ),
         },
     )
     assert response.status_code == 201, response.text

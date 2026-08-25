@@ -317,7 +317,7 @@ Record concurrency, retry count, restart recovery, and immutable-snapshot eviden
 - Consumes: authenticated teachers/admins, generation job service, artifacts, audit service, and safe storage.
 - Produces: enqueue/status/history/retry/download routes and admin-integrated permanent file deletion.
 
-- [ ] **Step 1: Write failing API tests**
+- [x] **Step 1: Write failing API tests**
 
 ```python
 def test_teacher_can_generate_and_download_any_live_record(teacher_client, other_teachers_evaluation, csrf):
@@ -335,23 +335,23 @@ def test_download_rejects_artifact_path_tampering(teacher_client, completed_gene
 
 Also test trashed-record generation rejection, invalid form rejection, retry permissions, `Content-Disposition` UTF-8 filenames, audit entries, and permanent-delete storage fail-closed behavior.
 
-- [ ] **Step 2: Run tests and verify routes are absent**
+- [x] **Step 2: Run tests and verify routes are absent**
 
 Run: `uv run --project server pytest server/tests/test_generation_api.py -q`
 
 Expected: 404/import failures.
 
-- [ ] **Step 3: Implement endpoints and download safety**
+- [x] **Step 3: Implement endpoints and download safety**
 
 Only artifacts referenced by the requested generation row may be downloaded. Re-resolve and verify the path is inside the report root before `FileResponse`. Set exact MIME, `X-Content-Type-Options: nosniff`, private/no-store caching, and RFC 5987 filename encoding.
 
 Generation creation validates required student name, recommendation direction, and recommended class before freezing the snapshot.
 
-- [ ] **Step 4: Integrate admin permanent deletion**
+- [x] **Step 4: Integrate admin permanent deletion**
 
 The admin deletion transaction first marks file cleanup intent; the storage service deletes only validated project paths; database deletion commits after file cleanup succeeds. Failure leaves the online record in the recycle bin and returns a stable maintenance error instead of deleting database references to undeleted files.
 
-- [ ] **Step 5: Run the full reporting and foundation suites**
+- [x] **Step 5: Run the full reporting and foundation suites**
 
 Run:
 
@@ -365,7 +365,7 @@ uv run --project server mypy server/src
 
 Expected: every command passes.
 
-- [ ] **Step 6: Commit reporting API completion**
+- [x] **Step 6: Commit reporting API completion**
 
 Record generation authorization, safe downloads, permanent-delete file behavior, full backend suite, Node parity, and Pages regression evidence.
 

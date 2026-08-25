@@ -22,9 +22,12 @@ class AuthenticatedClient:
 
 
 @pytest.fixture
-def settings():
+def settings(tmp_path):
     from makerseed_app.config import Settings
 
+    report_root = tmp_path / "reports"
+    report_root.mkdir()
+    project_root = Path(__file__).resolve().parents[2]
     return Settings(
         environment="test",
         app_version="test",
@@ -32,6 +35,11 @@ def settings():
         secure_cookies=False,
         session_secret="test-session-secret-that-is-long-enough",
         bootstrap_secret="test-bootstrap-secret-that-is-long-enough",
+        report_root=report_root,
+        report_font_path=Path("C:/Windows/Fonts/simhei.ttf"),
+        logo_mark_path=project_root / "assets" / "logo-mark.png",
+        logo_lockup_path=project_root / "assets" / "logo-lockup.png",
+        promo_text="测试课程说明",
     )
 
 

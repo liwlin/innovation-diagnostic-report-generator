@@ -4,11 +4,12 @@ from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
+from ..reports.storage import ReportStorage
 from ..schemas.records import (
     BatchCreate,
     BatchResponse,
@@ -132,6 +133,7 @@ def restore_evaluation(
 def permanently_delete_evaluation(
     evaluation_id: UUID,
     request: PermanentDeleteRequest,
+    http_request: Request,
     _csrf: Annotated[None, Depends(require_csrf)],
     actor: Annotated[User, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
@@ -141,4 +143,5 @@ def permanently_delete_evaluation(
         evaluation_id=evaluation_id,
         reason=request.reason,
         actor=actor,
+        storage=ReportStorage(http_request.app.state.settings.report_root),
     )

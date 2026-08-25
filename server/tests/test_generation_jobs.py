@@ -56,13 +56,26 @@ def _artifact_renderer(snapshot, storage, output_dir, _assets):
     return artifacts
 
 
+def _ready_evaluation(identity, *, name: str = "张三"):
+    return create_evaluation(
+        identity,
+        name=name,
+        payload_changes={
+            "dir": 0,
+            "obs1": "完成了齿轮结构并主动解释转向关系。",
+            "obs2": "继续比较不同方案并记录结果。",
+            "reason": "动手实践和创意想法表现突出。",
+        },
+    )
+
+
 def test_enqueue_freezes_snapshot_and_every_request_gets_new_id(
     authenticated_client_factory, db_session, tmp_path: Path
 ):
     from makerseed_app.reports.jobs import enqueue_generation
 
     teacher = authenticated_client_factory()
-    created = create_evaluation(teacher, name="快照学生")
+    created = _ready_evaluation(teacher, name="快照学生")
     evaluation_id = UUID(created["evaluation_id"])
     job_settings = _job_settings(tmp_path)
 
@@ -96,7 +109,7 @@ def test_restart_requeues_stale_running_job(
     from makerseed_app.reports.jobs import enqueue_generation, recover_stale_jobs
 
     teacher = authenticated_client_factory()
-    created = create_evaluation(teacher)
+    created = _ready_evaluation(teacher)
     job = enqueue_generation(
         db_session,
         evaluation_id=UUID(created["evaluation_id"]),
@@ -121,7 +134,7 @@ def test_renderer_failure_retries_twice_then_marks_failed(
     from makerseed_app.reports.jobs import enqueue_generation, process_next_generation
 
     teacher = authenticated_client_factory()
-    created = create_evaluation(teacher)
+    created = _ready_evaluation(teacher)
     job = enqueue_generation(
         db_session,
         evaluation_id=UUID(created["evaluation_id"]),
@@ -154,8 +167,8 @@ async def test_worker_lock_prevents_concurrent_rendering(
     from makerseed_app.reports.jobs import GenerationWorker, enqueue_generation
 
     teacher = authenticated_client_factory()
-    first = create_evaluation(teacher, name="并发甲")
-    second = create_evaluation(teacher, name="并发乙")
+    first = _ready_evaluation(teacher, name="并发甲")
+    second = _ready_evaluation(teacher, name="并发乙")
     with app.state.session_factory() as session:
         for created in (first, second):
             enqueue_generation(

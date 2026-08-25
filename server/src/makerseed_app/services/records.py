@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import UTC, date, datetime
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import and_, or_, select
@@ -11,6 +12,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from ..errors import ApiError
 from ..models import Batch, Evaluation, EvaluationVersion, GenerationRecord, Student, User
+from ..reports.storage import ReportStorage, UnsafeReportPath
 from ..schemas.records import BatchCreate, EvaluationCreate, EvaluationUpdate
 from .audit import write_audit_event
 
@@ -257,6 +259,7 @@ def permanently_delete_evaluation(
     evaluation_id: UUID,
     reason: str,
     actor: User,
+    storage: ReportStorage | None = None,
 ) -> None:
     evaluation = db.get(Evaluation, evaluation_id)
     if evaluation is None:
@@ -266,6 +269,26 @@ def permanently_delete_evaluation(
     student = db.get(Student, evaluation.student_id)
     if student is None:
         raise ApiError("evaluation_corrupt", "记录关联不完整，请联系管理员", 500)
+    if storage is not None:
+        artifact_paths: list[Path] = []
+        jobs = db.scalars(
+            select(GenerationRecord).where(GenerationRecord.evaluation_id == evaluation.id)
+        ).all()
+        try:
+            for job in jobs:
+                for artifact in job.artifact_manifest.get("artifacts", []):
+                    relative_path = str(artifact.get("relative_path") or "")
+                    artifact_paths.append(storage.resolve_existing_file(relative_path))
+        except UnsafeReportPath as error:
+            raise ApiError(
+                "report_cleanup_failed",
+                "报告文件路径校验失败，记录未删除",
+                500,
+            ) from error
+        try:
+            storage.delete_generation_files(artifact_paths)
+        except OSError as error:
+            raise ApiError("report_cleanup_failed", "报告文件删除失败，记录未删除", 500) from error
     write_audit_event(
         db,
         actor_user_id=actor.id,

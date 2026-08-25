@@ -133,3 +133,12 @@ class ReportStorage:
             validated.append(candidate)
         for candidate in validated:
             candidate.unlink(missing_ok=True)
+
+    def resolve_existing_file(self, relative_path: str) -> Path:
+        requested = Path(relative_path)
+        if requested.is_absolute():
+            raise UnsafeReportPath("artifact path must be relative")
+        candidate = self._assert_inside(self.root / requested)
+        if candidate.is_symlink() or not candidate.is_file():
+            raise UnsafeReportPath("artifact is not a regular project file")
+        return candidate

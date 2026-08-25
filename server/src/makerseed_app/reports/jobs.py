@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import Settings
 from ..database import SessionFactory
 from ..errors import ApiError
 from ..models import Batch, Evaluation, GenerationRecord, Student
@@ -35,6 +36,20 @@ class GenerationJobSettings:
     promo_text: str
 
 
+def job_settings_from_app(settings: Settings) -> GenerationJobSettings:
+    return GenerationJobSettings(
+        report_root=settings.report_root,
+        assets=RenderAssets(
+            font_path=settings.report_font_path,
+            logo_mark_path=settings.logo_mark_path,
+            logo_lockup_path=settings.logo_lockup_path,
+        ),
+        renderer_version=settings.app_version,
+        filename_pattern=settings.filename_pattern,
+        promo_text=settings.promo_text,
+    )
+
+
 def enqueue_generation(
     db: Session,
     *,
@@ -53,6 +68,20 @@ def enqueue_generation(
     evaluation, student, batch = row
     if evaluation.deleted_at is not None:
         raise ApiError("evaluation_trashed", "回收站中的记录不能生成报告", 409)
+    missing: list[str] = []
+    if not student.name.strip():
+        missing.append("学员姓名")
+    if int(evaluation.payload.get("dir", -1)) < 0:
+        missing.append("推荐方向")
+    if not evaluation.recommended_class.strip():
+        missing.append("建议班级")
+    if missing:
+        raise ApiError(
+            "report_not_ready",
+            "请先补齐报告必填内容",
+            422,
+            {"missing": missing},
+        )
     generation_id = uuid4()
     snapshot = {
         "evaluation_id": str(evaluation.id),
@@ -163,6 +192,7 @@ def _artifact_manifest(artifacts: list[ReportArtifact]) -> dict[str, object]:
     return {
         "artifacts": [
             {
+                "id": f"{artifact.variant}-{artifact.format}",
                 "variant": artifact.variant,
                 "format": artifact.format,
                 "relative_path": artifact.relative_path,
