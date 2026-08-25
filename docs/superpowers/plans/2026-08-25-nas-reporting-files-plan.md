@@ -265,7 +265,7 @@ Include the renderer version, fixture coverage, parent/internal separation, dime
 - Consumes: `GenerationRecord`, evaluation snapshot, renderer, storage, and app lifespan.
 - Produces: `enqueue_generation`, `process_next_generation`, `recover_stale_jobs`, and a single worker lifecycle.
 
-- [ ] **Step 1: Write failing queue-state tests**
+- [x] **Step 1: Write failing queue-state tests**
 
 ```python
 def test_two_jobs_never_render_concurrently(job_service, renderer_probe):
@@ -281,27 +281,27 @@ def test_restart_requeues_stale_running_job(db, stale_running_job):
 
 Also test immutable snapshot, a new generation UUID on every request, two retries then `failed`, completed-job idempotence, and partial-artifact cleanup.
 
-- [ ] **Step 2: Run tests and verify missing queue service**
+- [x] **Step 2: Run tests and verify missing queue service**
 
 Run: `uv run --project server pytest server/tests/test_generation_jobs.py -q`
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement transactional claim and recovery**
+- [x] **Step 3: Implement transactional claim and recovery**
 
 PostgreSQL claim uses `SELECT ... FOR UPDATE SKIP LOCKED` ordered by creation time. SQLite tests use an equivalent single-process branch. Transition `queued -> running -> completed|queued|failed` in explicit transactions. Store attempt count, started/completed timestamps, sanitized error code, renderer version, snapshot, and artifact metadata.
 
-- [ ] **Step 4: Register exactly one lifespan worker**
+- [x] **Step 4: Register exactly one lifespan worker**
 
 The app factory starts one `asyncio` task using a bounded polling interval and stops it gracefully. It must not start in migrations, CLI commands, or tests unless the test fixture enables it.
 
-- [ ] **Step 5: Run job tests**
+- [x] **Step 5: Run job tests**
 
 Run: `uv run --project server pytest server/tests/test_generation_jobs.py -q`
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit durable generation jobs**
+- [x] **Step 6: Commit durable generation jobs**
 
 Record concurrency, retry count, restart recovery, and immutable-snapshot evidence.
 

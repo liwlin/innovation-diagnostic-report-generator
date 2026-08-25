@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = 480
     max_failed_logins: int = 5
     lockout_minutes: int = 15
+    generation_worker_enabled: bool = False
+    generation_poll_seconds: float = 2.0
+    report_root: Path = Path("var/reports")
+    report_font_path: Path = Path("assets/fonts/NotoSansCJK-Regular.ttc")
+    logo_mark_path: Path = Path("assets/logo-mark.png")
+    logo_lockup_path: Path = Path("assets/logo-lockup.png")
+    filename_pattern: str = "{name}_{date}_科创体验报告"
+    promo_text: str = ""
 
     @model_validator(mode="after")
     def load_production_secrets(self) -> Settings:
