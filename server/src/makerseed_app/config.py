@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     secure_cookies: bool = True
     session_cookie_name: str = "mkseed_session"
     csrf_cookie_name: str = "mkseed_csrf"
+    session_ttl_minutes: int = 480
+    max_failed_logins: int = 5
+    lockout_minutes: int = 15
 
     @model_validator(mode="after")
     def load_production_secrets(self) -> Settings:

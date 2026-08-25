@@ -283,7 +283,7 @@ Stage the database, model, migration, and model-test files. The commit must stat
 - Consumes: `User`, `Session`, database transaction dependency, and stable API errors.
 - Produces: `hash_password`, `verify_password`, `create_session`, `require_user`, `require_admin`, `require_csrf`, and auth routes.
 
-- [ ] **Step 1: Write failing authentication boundary tests**
+- [x] **Step 1: Write failing authentication boundary tests**
 
 ```python
 def test_login_sets_secure_session_and_csrf_cookies(client, teacher):
@@ -300,23 +300,23 @@ def test_state_change_without_csrf_is_rejected(authenticated_teacher_client):
 
 Also test wrong-password audit redaction, five-failure lockout, expired sessions, disabled users, logout invalidation, and admin role rejection for a teacher.
 
-- [ ] **Step 2: Run tests and confirm auth modules are missing**
+- [x] **Step 2: Run tests and confirm auth modules are missing**
 
 Run: `uv run --project server pytest server/tests/test_auth.py -q`
 
 Expected: import/route failures.
 
-- [ ] **Step 3: Implement password and opaque-session primitives**
+- [x] **Step 3: Implement password and opaque-session primitives**
 
 Use `PasswordHash.recommended()` from `pwdlib`. Generate 32 random bytes for the session token, store only `sha256(token).hexdigest()`, and place the raw token only in the `mkseed_session` HttpOnly cookie. Generate an independent CSRF token, place it in a readable `mkseed_csrf` cookie, and require exact equality with `X-CSRF-Token` for POST/PUT/PATCH/DELETE.
 
 Production cookies use `Secure`; tests may explicitly set `secure_cookies=False`. Both cookies use `SameSite=Lax`, an explicit path `/`, and bounded expiry.
 
-- [ ] **Step 4: Implement persistent account lockout and audit redaction**
+- [x] **Step 4: Implement persistent account lockout and audit redaction**
 
 After five consecutive failures, set `locked_until` for 15 minutes. Successful login clears the counter. Login audit metadata may include normalized username, source IP hash, outcome, and internal user ID; it must never include the submitted password, token, Cookie, Authorization header, or request body.
 
-- [ ] **Step 5: Register routes and run focused security tests**
+- [x] **Step 5: Register routes and run focused security tests**
 
 Run:
 
@@ -327,7 +327,7 @@ uv run --project server ruff check server/src/makerseed_app/security server/src/
 
 Expected: all tests pass and lint exits 0.
 
-- [ ] **Step 6: Commit authentication**
+- [x] **Step 6: Commit authentication**
 
 Stage only the auth schema, security modules, auth route, audit service, and auth tests. Record cookie, CSRF, lockout, and redaction evidence in the commit trailers.
 

@@ -26,8 +26,61 @@ def settings():
 
 
 @pytest.fixture
-def client(settings):
+def app(settings):
     from makerseed_app.main import create_app
+    from makerseed_app.models import Base
 
-    with TestClient(create_app(settings)) as test_client:
+    application = create_app(settings)
+    Base.metadata.create_all(application.state.engine)
+    yield application
+    Base.metadata.drop_all(application.state.engine)
+    application.state.engine.dispose()
+
+
+@pytest.fixture
+def client(app):
+    with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def db_session(app):
+    session = app.state.session_factory()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def teacher(db_session):
+    from makerseed_app.models import User
+    from makerseed_app.security.passwords import hash_password
+
+    user = User(
+        username="teacher",
+        display_name="李老师",
+        role="teacher",
+        password_hash=hash_password("correct horse battery staple"),
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def admin(db_session):
+    from makerseed_app.models import User
+    from makerseed_app.security.passwords import hash_password
+
+    user = User(
+        username="admin",
+        display_name="管理员",
+        role="admin",
+        password_hash=hash_password("admin correct horse battery staple"),
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
