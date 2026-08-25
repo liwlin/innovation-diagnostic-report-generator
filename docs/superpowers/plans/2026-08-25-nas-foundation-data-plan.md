@@ -497,7 +497,7 @@ Stage the admin/recycle/audit changes and tests. Record the permission matrix, s
 - Consumes: all Task 1-5 test output.
 - Produces: a reviewable phase verdict and checked task boxes.
 
-- [ ] **Step 1: Run the clean-room command set**
+- [x] **Step 1: Run the clean-room command set**
 
 Run from a fresh `server/.venv` created by `uv sync --project server --all-groups`:
 
@@ -510,11 +510,11 @@ pwsh -NoProfile -File tests/verify-static-site.ps1
 
 Expected: every command passes; the existing static Pages verifier proves no regression at this stage.
 
-- [ ] **Step 2: Record exact evidence**
+- [x] **Step 2: Record exact evidence**
 
 `docs/verification/foundation-data.md` must include commit SHA, dependency lock hash, test counts, commands, exit codes, SQLite limitation, and a clear statement that PostgreSQL/NAS behavior remains unproven until the operations plan.
 
-- [ ] **Step 3: Mark only completed checkboxes and commit evidence**
+- [x] **Step 3: Mark only completed checkboxes and commit evidence**
 
 Update this plan's executed boxes based on actual output. Commit the evidence and plan status with `Not-tested: PostgreSQL and Synology hardware are verified in the operations phase` unless that evidence already exists.
 
