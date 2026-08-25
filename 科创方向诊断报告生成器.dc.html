@@ -9,6 +9,7 @@
 <script src="./shared/runtime-config.js"></script>
 <script src="./shared/editor-repository.js"></script>
 <script src="./shared/editor-mapping.js"></script>
+<script src="./shared/emergency-export.js"></script>
 </head>
 <body>
 <x-dc>
@@ -140,6 +141,7 @@ input,select,textarea,button{font-family:inherit;}
         <sc-if value="{{ showWorkspaceControls }}">
           <button onClick="{{ toggleBatchEdit }}" style="font-size:12px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">编辑</button>
           <button onClick="{{ toggleHistory }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">历史批次</button>
+          <button onClick="{{ exportEmergencyJson }}" style="font-size:12px;font-weight:700;color:#262626;background:#fff;border:1px solid #D3D9E5;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">导出应急 JSON</button>
         </sc-if>
         <sc-if value="{{ isApiMode }}">
           <button onClick="{{ backToNasList }}" style="font-size:12px;font-weight:700;color:#0F3ED2;background:#EEF3FF;border:1px solid #A9BFF3;border-radius:8px;padding:7px 12px;appearance:none;-webkit-appearance:none;flex-shrink:0;white-space:nowrap;">返回记录列表</button>
@@ -951,6 +953,18 @@ class Component extends DCLogic {
     if(this.repository.isConflicted()&&!window.confirm('当前记录存在保存冲突，仍然返回列表？')) return;
     this.repository.flush().then(function(){window.location.assign('/');});
   }
+  exportEmergencyJson(){
+    if(this.isApiMode) return;
+    var data=MakerSeedEmergencyExport.build({
+      workspace:{batches:this.state.batches,activeBatch:this.state.activeBatch,activeStudent:this.state.activeStudent},
+      classList:this.state.classList,promoText:this.state.promoText,sourceVersion:this.runtimeConfig.appVersion
+    });
+    var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    var link=document.createElement('a');
+    link.href=URL.createObjectURL(blob); link.download='科创诊断应急数据_'+todayCompact()+'.json';
+    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(link.href);
+    this.setState({status:'应急 JSON 已导出（不包含 AI API Key）',statusColor:'#15803d'});
+  }
   _cloneBatches(s){
     return s.batches.map(function(b){
       var nb = Object.assign({}, b);
@@ -1051,7 +1065,7 @@ class Component extends DCLogic {
     var cfg=this.state.aiCfg;
     if(!cfg.apiKey){ this.setState({status:'请先设置 AI 润色的 API Key', statusColor:'#991b1b', showAiSettings:true}); return; }
     if(!text || !text.trim()){ this.setState({status:'请先填写内容，再使用 AI 润色', statusColor:'#991b1b'}); return; }
-    var self=this;
+    var self=this,startedAt=Date.now();
     this.setState({aiBusyField:fieldKey, status:'AI 润色中…', statusColor:'#6B7280'});
     var url=(cfg.baseUrl||'https://api.deepseek.com').replace(/\/+$/,'')+'/chat/completions';
     fetch(url,{
@@ -1072,10 +1086,21 @@ class Component extends DCLogic {
       var out = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
       if(!out) throw new Error('返回内容为空');
       onDone(out.trim());
+      self._auditAiUse(fieldKey,cfg,true,Date.now()-startedAt);
       self.setState({aiBusyField:null, status:'AI 润色完成', statusColor:'#15803d'});
     }).catch(function(err){
+      self._auditAiUse(fieldKey,cfg,false,Date.now()-startedAt);
       self.setState({aiBusyField:null, status:'AI 润色失败：'+err.message+'（如为跨域限制，请联系技术支持配置代理）', statusColor:'#991b1b'});
     });
+  }
+  _auditAiUse(fieldKey,cfg,success,duration){
+    if(!this.isApiMode) return;
+    var stu=this._curStudent(),host='';
+    try{ host=new URL(cfg.baseUrl||'https://api.deepseek.com').hostname; }catch(e){ return; }
+    this._apiRequest('/api/events/ai-use',{
+      method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':MakerSeedEditorRepository.readCookie(document.cookie,'mkseed_csrf')},
+      body:JSON.stringify({evaluation_id:stu._apiEvaluationId,provider_host:host,model:cfg.model||'deepseek-chat',field_key:fieldKey,duration_ms:Math.max(0,Math.round(duration)),success:!!success})
+    }).catch(function(){});
   }
   polishObs1(){ this._aiPolish('obs1', this._curStudent().obs1, '这是"课堂具体表现"记录，请保留具体事件细节，不要改成空泛评价。', this.setObs1.bind(this)); }
   polishObs2(){ this._aiPolish('obs2', this._curStudent().obs2, '这是"下一步成长建议"，请保持具体可执行。', this.setObs2.bind(this)); }
@@ -1710,6 +1735,7 @@ class Component extends DCLogic {
       startNewBatch:function(){ self.startNewBatch(); },
       dismissCrossDay:function(){ self.dismissCrossDay(); },
       historyView: historyView,
+      exportEmergencyJson:function(){ self.exportEmergencyJson(); },
       studentsView: studentsView, addStudent:function(){ self.addStudent(); },
       canDeleteStudent: batch.students.length>1,
       removeStudent:function(){ self.removeStudent(s.activeStudent); },

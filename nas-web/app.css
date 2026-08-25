@@ -104,6 +104,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .admin-create-form { display: grid; grid-template-columns: 1fr 1fr 140px 1fr 120px; gap: 12px; margin-bottom: 18px; }
 .admin-create-form .new-button { min-height: 44px; }
 .audit-toolbar { grid-template-columns: minmax(260px, 420px); }
+.import-panel { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
+.import-panel h2 { margin: 0 0 8px; font-size: 18px; }
+.import-panel p { color: var(--muted); font-size: 13px; }
+.import-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.import-actions .control { width: min(360px, 100%); }
+.import-actions .primary-button { width: auto; margin: 0; padding: 0 16px; }
 
 @media (max-width: 980px) {
   .app-shell { display: block; }

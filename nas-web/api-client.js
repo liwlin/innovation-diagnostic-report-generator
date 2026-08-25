@@ -54,6 +54,25 @@
       return payload;
     }
 
+    async function requestForm(path, form) {
+      const response = await fetchImpl(path, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'X-CSRF-Token': readCookie(cookieReader(), 'mkseed_csrf'),
+        },
+        body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const error = new ApiClientError(response.status, payload.error);
+        if (response.status === 401) onUnauthorized(error);
+        throw error;
+      }
+      return payload;
+    }
+
     function queryPath(path, filters) {
       const params = new URLSearchParams();
       for (const [key, value] of Object.entries(filters || {})) {
@@ -96,6 +115,17 @@
       updateUser: (id, input) =>
         request(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: input }),
       listAudit: (filters) => request(queryPath('/api/admin/audit', filters), { csrf: false }),
+      previewEmergencyImport: (file) => {
+        const form = new FormData();
+        form.append('file', file, file.name || 'emergency.json');
+        return requestForm('/api/admin/imports/preview', form);
+      },
+      confirmEmergencyImport: (file, sha256) => {
+        const form = new FormData();
+        form.append('sha256', sha256);
+        form.append('file', file, file.name || 'emergency.json');
+        return requestForm('/api/admin/imports/confirm', form);
+      },
       queryPath,
     });
   }

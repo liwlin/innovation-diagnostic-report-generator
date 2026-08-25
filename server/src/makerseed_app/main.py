@@ -8,7 +8,9 @@ from fastapi import FastAPI
 
 from .api.admin import router as admin_router
 from .api.auth import router as auth_router
+from .api.events import router as events_router
 from .api.generations import router as generations_router
+from .api.imports import router as imports_router
 from .api.records import router as records_router
 from .config import Settings
 from .database import build_engine, build_session_factory
@@ -68,7 +70,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(ApiError, api_error_handler)
     app.include_router(admin_router)
     app.include_router(auth_router)
+    app.include_router(events_router)
     app.include_router(generations_router)
+    app.include_router(imports_router)
     app.include_router(records_router)
 
     @app.get("/api/health")

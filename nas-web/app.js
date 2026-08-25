@@ -4,7 +4,7 @@
   const root = document.getElementById('app');
   const runtime = MakerSeedRuntime.getConfig(window.location, window.__MKSEED_RUNTIME__);
   const views = MakerSeedViews;
-  const state = { session: null, activeView: 'records', records: [], users: [], audit: [], filters: {}, loading: false, error: '', loginBusy: false, loginError: '' };
+  const state = { session: null, activeView: 'records', records: [], users: [], audit: [], filters: {}, loading: false, error: '', loginBusy: false, loginError: '', importFile: null, importPreview: null, importMessage: '' };
   const api = MakerSeedApiClient.createApiClient({ onUnauthorized: showLogin });
 
   function renderLogin() {
@@ -126,10 +126,23 @@
     try { state.users = await api.listUsers(); }
     catch (error) { state.error = error.message; }
     const content = views.userWorkspace({
-      users: state.users, error: state.error,
+      users: state.users, error: state.error, importPreview: state.importPreview, importMessage: state.importMessage,
       async onCreate(input) { try { await api.createUser(input); await showUsers(); } catch (error) { await showUsers(error.message); } },
       async onToggle(user) { try { await api.updateUser(user.id, { is_active: !user.is_active }); await showUsers(); } catch (error) { await showUsers(error.message); } },
       onReset: showPasswordReset,
+      async onPreviewImport(file) {
+        if (!file) { state.importMessage = '请选择应急 JSON 文件'; await showUsers(); return; }
+        try { state.importFile = file; state.importPreview = await api.previewEmergencyImport(file); state.importMessage = ''; await showUsers(); }
+        catch (error) { state.importPreview = null; state.importMessage = error.message; await showUsers(); }
+      },
+      async onConfirmImport() {
+        if (!state.importFile || !state.importPreview) return;
+        try {
+          const result = await api.confirmEmergencyImport(state.importFile, state.importPreview.sha256);
+          state.importMessage = `导入完成：新增 ${result.counts.imported} 条，冲突 ${result.counts.conflict} 条未覆盖。`;
+          state.importFile = null; state.importPreview = null; await showUsers();
+        } catch (error) { state.importMessage = error.message; await showUsers(); }
+      },
     });
     renderShell(content);
   }

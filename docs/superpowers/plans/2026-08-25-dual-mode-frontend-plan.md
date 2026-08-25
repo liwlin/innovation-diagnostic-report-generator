@@ -325,11 +325,11 @@ Record teacher/admin DOM boundary, reason validation, backup warning, escaping, 
 - Consumes: current local batches/class list/promo, admin auth, multipart JSON file, normalized record service, and audit service.
 - Produces: Pages export without secrets, admin preview/confirm import, idempotent hash, and sanitized AI-use audit.
 
-- [ ] **Step 1: Write failing export-content test**
+- [x] **Step 1: Write failing export-content test**
 
 The browser test exports a representative local workspace and asserts the JSON includes `schema_version`, `exported_at`, `source_version`, `batches`, `class_list`, and `promo_text`; it must not contain `apiKey`, `Authorization`, NAS URL, cookies, or any key from `mkseed_diag_aicfg_v1`.
 
-- [ ] **Step 2: Write failing import API tests**
+- [x] **Step 2: Write failing import API tests**
 
 ```python
 def test_preview_is_non_mutating(admin_client, emergency_json, csrf, db):
@@ -348,21 +348,21 @@ def test_confirm_is_idempotent_by_sha256(admin_client, emergency_json, csrf):
 
 Also test teacher denial, 10 MiB limit, invalid JSON/schema rejection, duplicate/conflict counts, file-hash mismatch, no API-key import, and audit rows.
 
-- [ ] **Step 3: Run tests and verify missing implementations**
+- [x] **Step 3: Run tests and verify missing implementations**
 
 Run: `uv run --project server pytest server/tests/test_emergency_import.py server/tests/test_ai_audit_event.py -q`
 
 Expected: missing route/service failures.
 
-- [ ] **Step 4: Implement export and two-pass import**
+- [x] **Step 4: Implement export and two-pass import**
 
 Preview parses and normalizes without writes, returns SHA-256 and `new/duplicate/conflict/invalid` counts plus safe row labels. Confirm reparses the uploaded bytes, recomputes the same hash, rejects an already completed hash, creates records through the standard service so versions/audits remain valid, and stores only import metadata—not API keys—in `emergency_imports`.
 
-- [ ] **Step 5: Implement sanitized AI-use event**
+- [x] **Step 5: Implement sanitized AI-use event**
 
 NAS editor posts provider hostname, model, field key, evaluation UUID, duration, and success/failure after a browser-direct AI request. Server rejects URLs with credentials, strips query/path, bounds values, and writes audit only. No prompt, response text, or API Key is accepted by the schema.
 
-- [ ] **Step 6: Run import, AI audit, and static regression tests**
+- [x] **Step 6: Run import, AI audit, and static regression tests**
 
 Run:
 
@@ -374,7 +374,7 @@ pwsh -NoProfile -File tests/verify-static-site.ps1
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit emergency recovery behavior**
+- [x] **Step 7: Commit emergency recovery behavior**
 
 Record no-secret export, non-mutating preview, hash idempotence, conflict counts, admin-only import, and AI audit redaction.
 

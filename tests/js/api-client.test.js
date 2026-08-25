@@ -88,3 +88,22 @@ test('login sends JSON but no stale csrf header', async () => {
   });
 });
 
+test('emergency import uses multipart body with csrf and no manual content type', async () => {
+  const calls = [];
+  const api = clients.createApiClient({
+    cookieReader: () => 'mkseed_csrf=csrf-value',
+    async fetchImpl(url, options) {
+      calls.push({ url, options });
+      return response(200, { sha256: 'a'.repeat(64), counts: {} });
+    },
+  });
+  const file = new Blob(['{}'], { type: 'application/json' });
+
+  await api.previewEmergencyImport(file);
+
+  assert.equal(calls[0].url, '/api/admin/imports/preview');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.equal(calls[0].options.headers['X-CSRF-Token'], 'csrf-value');
+  assert.equal(calls[0].options.headers['Content-Type'], undefined);
+  assert.equal(calls[0].options.body instanceof FormData, true);
+});

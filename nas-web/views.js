@@ -228,7 +228,7 @@
     );
   }
 
-  function userWorkspace({ users, error, onCreate, onToggle, onReset }) {
+  function userWorkspace({ users, error, importPreview, importMessage, onCreate, onToggle, onReset, onPreviewImport, onConfirmImport }) {
     const username = element('input', { className: 'control', placeholder: '账号', required: 'required' });
     const displayName = element('input', { className: 'control', placeholder: '显示名', required: 'required' });
     const role = element('select', { className: 'control' }, element('option', { value: 'teacher' }, '老师'), element('option', { value: 'admin' }, '管理员'));
@@ -243,7 +243,16 @@
       'tr', {}, element('td', {}, user.username), element('td', {}, user.display_name), element('td', {}, user.role === 'admin' ? '管理员' : '老师'), element('td', {}, user.is_active ? '启用' : '停用'),
       element('td', { className: 'row-actions' }, element('button', { className: 'text-button', type: 'button', onClick: () => onToggle(user) }, user.is_active ? '停用' : '启用'), element('button', { className: 'text-button', type: 'button', onClick: () => onReset(user) }, '重置密码')),
     ));
-    return element('section', {}, form, error ? element('p', { className: 'error-message' }, error) : null, element('div', { className: 'table-frame' }, element('table', { className: 'record-table' }, element('thead', {}, element('tr', {}, ...['账号', '显示名', '角色', '状态', '操作'].map((label) => element('th', { scope: 'col' }, label)))), element('tbody', {}, rows))));
+    const importFile = element('input', { className: 'control', type: 'file', accept: 'application/json,.json', 'aria-label': '选择应急 JSON 文件' });
+    const importSummary = importPreview
+      ? `新增 ${importPreview.counts.new} · 重复 ${importPreview.counts.duplicate} · 冲突 ${importPreview.counts.conflict} · 无效 ${importPreview.counts.invalid}`
+      : '先预览，再确认导入；不会自动覆盖 NAS 记录。';
+    const importPanel = element(
+      'section', { className: 'import-panel' }, element('h2', {}, '应急数据导入'),
+      element('p', {}, importSummary), importMessage ? element('p', { className: 'error-message' }, importMessage) : null,
+      element('div', { className: 'import-actions' }, importFile, element('button', { className: 'secondary-button', type: 'button', onClick: () => onPreviewImport(importFile.files[0]) }, '预览文件'), importPreview ? element('button', { className: 'primary-button', type: 'button', onClick: onConfirmImport }, '确认导入新增记录') : null),
+    );
+    return element('section', {}, form, error ? element('p', { className: 'error-message' }, error) : null, element('div', { className: 'table-frame' }, element('table', { className: 'record-table' }, element('thead', {}, element('tr', {}, ...['账号', '显示名', '角色', '状态', '操作'].map((label) => element('th', { scope: 'col' }, label)))), element('tbody', {}, rows))), importPanel);
   }
 
   function passwordResetDialog({ user, onCancel, onConfirm, error }) {
