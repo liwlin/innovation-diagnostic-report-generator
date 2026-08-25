@@ -61,11 +61,11 @@
 - Consumes: the verified local static site.
 - Produces: `https://liwlin.github.io/innovation-diagnostic-report-generator/`.
 
-- [ ] **Step 1: Initialize Git and inspect the exact publish set**
+- [x] **Step 1: Initialize Git and inspect the exact publish set**
 
   Run `git init -b main`, stage files, and verify `.omx/`, `uploads/`, and `.thumbnail` are absent from the index.
 
-- [ ] **Step 2: Commit with Lore trailers**
+- [x] **Step 2: Commit with Lore trailers**
 
   Commit the tested site with `Tested:` and `Not-tested:` trailers.
 
