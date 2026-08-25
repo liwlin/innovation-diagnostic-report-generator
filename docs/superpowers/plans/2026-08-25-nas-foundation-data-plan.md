@@ -139,7 +139,7 @@ An update request uses:
 - Consumes: environment variables prefixed `MKSEED_` and optional secret files.
 - Produces: `Settings`, `load_secret(path: Path) -> str`, and `create_app(settings: Settings | None = None) -> FastAPI`.
 
-- [ ] **Step 1: Write failing health and production-secret tests**
+- [x] **Step 1: Write failing health and production-secret tests**
 
 ```python
 def test_health_discloses_only_status_and_version(client):
@@ -152,19 +152,19 @@ def test_production_rejects_missing_secret_files(tmp_path):
         Settings(environment="production", secrets_dir=tmp_path)
 ```
 
-- [ ] **Step 2: Run the focused tests and verify the package does not exist**
+- [x] **Step 2: Run the focused tests and verify the package does not exist**
 
 Run: `uv run --project server pytest server/tests/test_health.py server/tests/test_config.py -q`
 
 Expected: collection fails because `makerseed_app` is not importable.
 
-- [ ] **Step 3: Create the package metadata and app factory**
+- [x] **Step 3: Create the package metadata and app factory**
 
 Use Python `>=3.12,<3.13`. Add runtime dependencies `fastapi`, `uvicorn[standard]`, `sqlalchemy>=2,<2.1`, `psycopg[binary]>=3,<4`, `alembic>=1,<2`, `pydantic-settings>=2,<3`, `pwdlib[argon2]>=0.2,<1`, `python-multipart>=0.0.20,<1`, `reportlab>=4,<5`, and `pillow>=11,<13`. Add development dependencies `pytest`, `pytest-asyncio`, `httpx`, `ruff`, and `mypy`, then generate `server/uv.lock` with `uv lock --project server`.
 
 `Settings` must default to `environment="development"`, `app_version="dev"`, `database_url="sqlite+pysqlite:///:memory:"`, `session_cookie_name="mkseed_session"`, and `csrf_cookie_name="mkseed_csrf"`. Production validation requires `database_url`, `session_secret`, and `bootstrap_secret` to come from files under `secrets_dir`.
 
-- [ ] **Step 4: Implement stable JSON errors and the health route**
+- [x] **Step 4: Implement stable JSON errors and the health route**
 
 `errors.py` must expose `ApiError(code: str, message: str, status_code: int, details: dict | None)` and return:
 
@@ -174,7 +174,7 @@ Use Python `>=3.12,<3.13`. Add runtime dependencies `fastapi`, `uvicorn[standard
 
 The health route must not test or disclose user counts, paths, database URLs, hostnames, or secret state.
 
-- [ ] **Step 5: Run quality checks**
+- [x] **Step 5: Run quality checks**
 
 Run:
 
@@ -187,7 +187,7 @@ uv run --project server mypy server/src
 
 Expected: all commands exit 0.
 
-- [ ] **Step 6: Commit the independently working skeleton**
+- [x] **Step 6: Commit the independently working skeleton**
 
 Stage only `server/pyproject.toml`, `server/uv.lock`, `server/src/makerseed_app/{__init__,config,errors,main}.py`, and the two tests. Commit with Lore trailers recording the production secret-file constraint and executed checks.
 
