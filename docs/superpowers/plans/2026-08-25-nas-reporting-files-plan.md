@@ -379,19 +379,19 @@ Record generation authorization, safe downloads, permanent-delete file behavior,
 - Consumes: rendered fixture artifacts and Task 1-5 output.
 - Produces: hashes, rendered previews, test counts, and a phase verdict.
 
-- [ ] **Step 1: Generate the fixed report set into an isolated temporary directory**
+- [x] **Step 1: Generate the fixed report set into an isolated temporary directory**
 
 Run a dedicated CLI command that exits unless its output root is under the OS temporary directory. Capture the four filenames, sizes, SHA-256 values, PDF page counts, PNG dimensions, and renderer version.
 
-- [ ] **Step 2: Visually inspect parent and internal output**
+- [x] **Step 2: Visually inspect parent and internal output**
 
 Render both PDFs to PNG and inspect all four images for clipping, unreadable Chinese, internal leakage into parent output, missing watermark, or inconsistent branding. Save only non-sensitive fixture previews under `docs/verification/artifacts/reporting/`.
 
-- [ ] **Step 3: Record exact commands and limitations**
+- [x] **Step 3: Record exact commands and limitations**
 
 Document that File Station ACL and NAS filesystem behavior remain unproven until the operations plan. Do not claim hardware evidence from local paths.
 
-- [ ] **Step 4: Mark executed boxes and commit evidence**
+- [x] **Step 4: Mark executed boxes and commit evidence**
 
 Update only boxes supported by output and commit the plan/evidence/artifacts with Lore trailers.
 
