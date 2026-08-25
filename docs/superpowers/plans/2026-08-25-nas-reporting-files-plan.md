@@ -149,7 +149,7 @@ Stage the shared fixture/functions, tests, and narrow HTML change. Record exact 
 - Consumes: report root, batch date/name, student display name, generation timestamp, filename base, and bytes.
 - Produces: `ReportStorage.resolve_generation_dir(...)`, `write_atomic(...)`, `hash_file(...)`, and `delete_generation_files(...)`.
 
-- [ ] **Step 1: Write path traversal, collision, and atomic-write tests**
+- [x] **Step 1: Write path traversal, collision, and atomic-write tests**
 
 ```python
 def test_generation_path_is_human_readable_and_inside_root(tmp_path):
@@ -166,25 +166,25 @@ def test_delete_refuses_path_outside_report_root(tmp_path):
 
 Also test Windows reserved names, `..`, Unicode whitespace, 100-character component bounds, duplicate timestamp suffix `-2`, temporary-file cleanup, and a simulated writer failure leaving no final file.
 
-- [ ] **Step 2: Run tests and verify missing implementation**
+- [x] **Step 2: Run tests and verify missing implementation**
 
 Run: `uv run --project server pytest server/tests/test_report_paths.py -q`
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement canonical path ownership**
+- [x] **Step 3: Implement canonical path ownership**
 
 Use `Path.resolve(strict=False)` and `candidate.is_relative_to(root.resolve())` before every write/delete. Sanitization removes legacy illegal characters plus control characters, collapses whitespace, strips leading/trailing dots, rejects `.`/`..`, and truncates without splitting Unicode code points.
 
 `write_atomic` creates a random `.partial` sibling with mode `0600`, writes and fsyncs, validates bytes, then uses `os.replace`. It returns SHA-256, byte size, and final path.
 
-- [ ] **Step 4: Run storage tests**
+- [x] **Step 4: Run storage tests**
 
 Run: `uv run --project server pytest server/tests/test_report_paths.py -q`
 
 Expected: all cases pass.
 
-- [ ] **Step 5: Commit storage isolation**
+- [x] **Step 5: Commit storage isolation**
 
 Record traversal rejection, project-root enforcement, collision handling, and atomic-write evidence.
 
