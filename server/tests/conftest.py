@@ -31,4 +31,3 @@ def client(settings):
 
     with TestClient(create_app(settings)) as test_client:
         yield test_client
-

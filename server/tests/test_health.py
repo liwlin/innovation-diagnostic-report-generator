@@ -3,4 +3,3 @@ def test_health_discloses_only_status_and_version(client):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "version": "test"}
-

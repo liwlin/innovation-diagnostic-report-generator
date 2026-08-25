@@ -41,4 +41,3 @@ class Settings(BaseSettings):
         self.session_secret = SecretStr(load_secret(self.secrets_dir / "session_secret"))
         self.bootstrap_secret = SecretStr(load_secret(self.secrets_dir / "bootstrap_secret"))
         return self
-

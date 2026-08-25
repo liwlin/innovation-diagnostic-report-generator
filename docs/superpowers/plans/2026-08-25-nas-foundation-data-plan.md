@@ -211,7 +211,7 @@ Stage only `server/pyproject.toml`, `server/uv.lock`, `server/src/makerseed_app/
 - Consumes: `Settings.database_url`.
 - Produces: `Base`, `build_engine(settings)`, `session_scope()`, `get_db()`, and the nine tables named in the design.
 
-- [ ] **Step 1: Write the failing schema test**
+- [x] **Step 1: Write the failing schema test**
 
 ```python
 def test_initial_schema_contains_required_tables(engine):
@@ -224,19 +224,19 @@ def test_initial_schema_contains_required_tables(engine):
     }
 ```
 
-- [ ] **Step 2: Run it and verify the models are absent**
+- [x] **Step 2: Run it and verify the models are absent**
 
 Run: `uv run --project server pytest server/tests/test_models.py -q`
 
 Expected: import or assertion failure naming missing tables.
 
-- [ ] **Step 3: Implement focused declarative models**
+- [x] **Step 3: Implement focused declarative models**
 
 Use UUID primary keys, timezone-aware timestamps, non-null `version` on `evaluations`, and `JSON().with_variant(JSONB, "postgresql")` for payload/snapshot metadata. `students.name`, `students.grade`, `batches.event_date`, `batches.display_name`, `evaluations.recommended_class`, `evaluations.deleted_at`, `evaluations.updated_by_id`, and `generation_records.status` must be separately indexed.
 
 `AuditEvent.target_id` is a plain UUID value rather than a foreign key so a deletion tombstone survives permanent deletion. `Session.token_hash` is unique and stores SHA-256 only. `EvaluationVersion` stores a complete immutable snapshot for every successful update.
 
-- [ ] **Step 4: Create an explicit Alembic migration**
+- [x] **Step 4: Create an explicit Alembic migration**
 
 The migration must create all indexes and constraints, including:
 
@@ -251,7 +251,7 @@ sa.CheckConstraint(
 
 Do not use `Base.metadata.create_all()` in production startup.
 
-- [ ] **Step 5: Verify model and migration parity**
+- [x] **Step 5: Verify model and migration parity**
 
 Run:
 
@@ -263,7 +263,7 @@ uv run --project server alembic -c server/alembic.ini current
 
 Expected: tests pass and Alembic reports `0001_initial_schema (head)` against the test database.
 
-- [ ] **Step 6: Commit the schema**
+- [x] **Step 6: Commit the schema**
 
 Stage the database, model, migration, and model-test files. The commit must state that PostgreSQL-specific grants are deferred to the operations plan but schema behavior is covered now.
 
