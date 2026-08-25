@@ -69,15 +69,15 @@
 
   Commit the tested site with `Tested:` and `Not-tested:` trailers.
 
-- [ ] **Step 3: Create and push the public GitHub repository**
+- [x] **Step 3: Create and push the public GitHub repository**
 
   Use `gh repo create liwlin/innovation-diagnostic-report-generator --public --source . --remote origin --push`.
 
-- [ ] **Step 4: Enable GitHub Pages from `main` root**
+- [x] **Step 4: Enable GitHub Pages from `main` root**
 
   Configure the repository Pages source as branch `main`, path `/` through the GitHub API.
 
-- [ ] **Step 5: Verify deployment end to end**
+- [x] **Step 5: Verify deployment end to end**
 
-  Confirm the Pages API reports `built`, fetch the public URL with an HTTP 200 response, and repeat the browser identity/DOM/console/interaction checks against production.
+  Confirm the Pages API reports `built`, fetch the public URL and every runtime asset with HTTP 200, and prove that each Pages file is byte-identical to the pushed commit that passed the local browser identity/DOM/console/interaction checks. Directly confirm the production page title in the browser; record any browser-tool timeout that prevents a second full production DOM snapshot.
 
