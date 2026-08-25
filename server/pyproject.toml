@@ -20,9 +20,11 @@ dependencies = [
 dev = [
   "httpx2>=2,<3",
   "mypy>=1.17,<2",
+  "pypdf>=6,<7",
   "pytest>=8.4,<10",
   "pytest-asyncio>=1,<2",
   "ruff>=0.12,<1",
+  "types-reportlab>=4,<5",
 ]
 
 [build-system]

@@ -62,7 +62,7 @@ class ReportArtifact:
     size: int
     mime: str
 
-def render_report_set(snapshot: ReportSnapshot, output_dir: Path, font_path: Path) -> list[ReportArtifact]: ...
+def render_report_set(snapshot: ReportSnapshot, storage: ReportStorage, output_dir: Path, assets: RenderAssets) -> list[ReportArtifact]: ...
 def process_next_generation(db: Session, settings: Settings) -> UUID | None: ...
 ```
 
@@ -201,11 +201,11 @@ Record traversal rejection, project-root enforcement, collision handling, and at
 - Consumes: immutable `ReportSnapshot`, output directory, logo assets, and configured Noto CJK font.
 - Produces: four validated `ReportArtifact` objects.
 
-- [ ] **Step 1: Create a fixed Chinese fixture covering every report section**
+- [x] **Step 1: Create a fixed Chinese fixture covering every report section**
 
 The fixture includes five dimension scores, three skill entries, custom modules, a custom direction, long observations, recommendation, recommended class, all internal fields, teacher/date metadata, and the exact expected filename bases.
 
-- [ ] **Step 2: Write failing renderer tests**
+- [x] **Step 2: Write failing renderer tests**
 
 ```python
 def test_renderer_creates_four_distinct_valid_artifacts(tmp_path, report_snapshot, font_path):
@@ -222,23 +222,23 @@ def test_parent_files_exclude_internal_text(rendered_parent_text):
 
 Also verify PNG size is exactly `1747x2471`, PDFs open as one A4 page, internal files contain `仅限内部使用`, and all Chinese fixture strings render without replacement boxes.
 
-- [ ] **Step 3: Run tests and verify missing renderer**
+- [x] **Step 3: Run tests and verify missing renderer**
 
 Run: `uv run --project server pytest server/tests/test_report_renderer.py -q`
 
 Expected: import failure.
 
-- [ ] **Step 4: Implement a shared layout model**
+- [x] **Step 4: Implement a shared layout model**
 
 `layout.py` defines page constants, typography, blocks, radar/bar/dot chart drawing, text wrapping, and internal-section inclusion once. PDF and PNG backends consume the same normalized block model so content decisions cannot diverge.
 
 `fonts.py` refuses startup when the configured CJK font is missing or unreadable. Do not silently fall back to a font that cannot render Chinese.
 
-- [ ] **Step 5: Implement and validate both render backends**
+- [x] **Step 5: Implement and validate both render backends**
 
 ReportLab generates the A4 PDF. Pillow generates the legacy-compatible `1747x2471` PNG. Load existing logo assets from read-only static paths. After each render, reopen with the corresponding parser, verify page/dimensions, compute the hash, and then allow atomic publication.
 
-- [ ] **Step 6: Run renderer and naming suites**
+- [x] **Step 6: Run renderer and naming suites**
 
 Run:
 
@@ -249,7 +249,7 @@ uv run --project server ruff check server/src/makerseed_app/reports
 
 Expected: all commands pass.
 
-- [ ] **Step 7: Commit report rendering**
+- [x] **Step 7: Commit report rendering**
 
 Include the renderer version, fixture coverage, parent/internal separation, dimensions, and font requirement in Lore trailers.
 

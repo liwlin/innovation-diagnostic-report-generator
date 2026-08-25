@@ -322,9 +322,11 @@ dependencies = [
 dev = [
     { name = "httpx2" },
     { name = "mypy" },
+    { name = "pypdf" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
+    { name = "types-reportlab" },
 ]
 
 [package.metadata]
@@ -345,9 +347,11 @@ requires-dist = [
 dev = [
     { name = "httpx2", specifier = ">=2,<3" },
     { name = "mypy", specifier = ">=1.17,<2" },
+    { name = "pypdf", specifier = ">=6,<7" },
     { name = "pytest", specifier = ">=8.4,<10" },
     { name = "pytest-asyncio", specifier = ">=1,<2" },
     { name = "ruff", specifier = ">=0.12,<1" },
+    { name = "types-reportlab", specifier = ">=4,<5" },
 ]
 
 [[package]]
@@ -584,6 +588,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pypdf"
+version = "6.16.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/66/54212e75406afd9f3e933d0dda23072f6aecc55c5a273077dc2e0b028b23/pypdf-6.16.2.tar.gz", hash = "sha256:595647f6191de6f402cfde1d0c455d6cbccbd509aac32b34783009c032de5d6e", size = 7008996, upload-time = "2026-08-23T13:50:07.135Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/f1/a2da3b55acd4ab737bf728c97edaaed5ec1d3c1236acb639dcdfa97e42c7/pypdf-6.16.2-py3-none-any.whl", hash = "sha256:c8b09a59399062fb45a1b8156c18a787a10a3dae03ac9674397a226712c94604", size = 385060, upload-time = "2026-08-23T13:50:05.349Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -726,6 +739,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/53/a3/1585216310e344e8102c22482f6060c7a6ea0322b63e026372e6dcefcfd6/truststore-0.10.4.tar.gz", hash = "sha256:9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301", size = 26169, upload-time = "2025-08-12T18:49:02.73Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/19/97/56608b2249fe206a67cd573bc93cd9896e1efb9e98bce9c163bcdc704b88/truststore-0.10.4-py3-none-any.whl", hash = "sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981", size = 18660, upload-time = "2025-08-12T18:49:01.46Z" },
+]
+
+[[package]]
+name = "types-reportlab"
+version = "4.5.1.20260807"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/05/528a606d545ffb1b683fb1a8fb0173300dffb03aa7d237e43e51569f5ab2/types_reportlab-4.5.1.20260807.tar.gz", hash = "sha256:879b1dccd85daf6ec15bfa9c293a2ab0190a73666d0f7df54fb512b3b6c1c7b5", size = 72806, upload-time = "2026-08-07T04:17:09.743Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/56/dedb438964c691e69c3dcfc939db74c618bd5683a797bc42a14b95fc180d/types_reportlab-4.5.1.20260807-py3-none-any.whl", hash = "sha256:5f5081bf2ecfa7b2694336d446649048f93872ac9b296b9977f5bc9afba6bf39", size = 113194, upload-time = "2026-08-07T04:17:08.563Z" },
 ]
 
 [[package]]
