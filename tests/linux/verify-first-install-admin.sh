@@ -390,6 +390,7 @@ restore_verified_current_state() {
 
 assert_upgrade_rejects_bad_current_hash() {
   reason=$1
+  write_install_passwords
   before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
   : >"$FAKE_DOCKER_LOG"
   if run_deploy >/dev/null 2>&1; then
@@ -479,6 +480,20 @@ restore_verified_current_state
 
 printf '0000000000000000000000000000000000000000000000000000000000000000  current.env\n' >"$PROJECT_ROOT/deployment-state/current.env.sha256"
 assert_upgrade_rejects_bad_current_hash "mismatched"
+restore_verified_current_state
+
+printf 'decoy state\n' >"$PROJECT_ROOT/deployment-state/decoy.env"
+(cd "$PROJECT_ROOT/deployment-state" && sha256sum decoy.env > current.env.sha256)
+assert_upgrade_rejects_bad_current_hash "other-file"
+restore_verified_current_state
+
+printf 'decoy state\n' >"$PROJECT_ROOT/deployment-state/decoy.env"
+(cd "$PROJECT_ROOT/deployment-state" && sha256sum decoy.env >> current.env.sha256)
+assert_upgrade_rejects_bad_current_hash "extra-line"
+restore_verified_current_state
+
+printf 'not-a-checksum\n' >>"$PROJECT_ROOT/deployment-state/current.env.sha256"
+assert_upgrade_rejects_bad_current_hash "malformed-extra-line"
 restore_verified_current_state
 
 write_install_passwords

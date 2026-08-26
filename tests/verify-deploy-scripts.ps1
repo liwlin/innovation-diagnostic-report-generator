@@ -125,7 +125,10 @@ Assert-Condition ($layout -notmatch '(synoshare|synouser|synogroup)') 'Install l
 
 $deploy = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/deploy.sh') -Raw -Encoding UTF8
 $previousStateReadPosition = $deploy.IndexOf('sed -n ''s/^RELEASE_ROOT=//p'' "$previous_state"')
+$previousStateCanonicalHashCheckPosition = $deploy.IndexOf('require_canonical_current_env_sha256 "$previous_state.sha256"')
 $previousStateHashCheckPosition = $deploy.IndexOf('sha256sum -c current.env.sha256')
+$deployLockPosition = $deploy.IndexOf('lock_dir="$PROJECT_ROOT/.deploy-lock"')
+$imageInspectPosition = $deploy.IndexOf('docker image inspect "$APP_IMAGE"')
 $backupPosition = $deploy.IndexOf('backup.sh')
 $verifyPosition = $deploy.IndexOf('restore-verify.sh')
 $migratePosition = $deploy.IndexOf('migrate.sh')
@@ -137,8 +140,16 @@ $smokePasswordDeletePosition = $deploy.IndexOf('rm -f "$SMOKE_TEST_PASSWORD_FILE
 $publishedHashCheckPosition = $deploy.LastIndexOf('(cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)')
 $smokeTestExactValidationPosition = $deploy.IndexOf('require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"')
 $pendingStateWritePosition = $deploy.IndexOf('>"$pending_state"')
+Assert-Condition ($previousStateCanonicalHashCheckPosition -ge 0 -and $previousStateCanonicalHashCheckPosition -lt $previousStateHashCheckPosition) 'Deploy must require canonical current.env.sha256 syntax before sha256sum -c.'
+Assert-Condition ($previousStateCanonicalHashCheckPosition -lt $previousStateReadPosition) 'Deploy must require canonical current.env.sha256 syntax before reading any previous deployment fields.'
+Assert-Condition ($previousStateCanonicalHashCheckPosition -lt $deployLockPosition) 'Deploy must require canonical current.env.sha256 syntax before taking the deployment lock.'
+Assert-Condition ($previousStateCanonicalHashCheckPosition -lt $imageInspectPosition) 'Deploy must require canonical current.env.sha256 syntax before Docker image inspection.'
 Assert-Condition ($previousStateHashCheckPosition -ge 0 -and $previousStateHashCheckPosition -lt $previousStateReadPosition) 'Deploy must verify current.env.sha256 before reading any previous deployment fields.'
 Assert-Condition ($deploy -match '\[ -f "\$previous_state\.sha256" \] && \[ ! -L "\$previous_state\.sha256" \]') 'Deploy must require current.env.sha256 to be a regular non-symlink file before upgrade.'
+Assert-Condition ($deploy -match '\[ "\$line_count" -ne 1 \]') 'Deploy must require current.env.sha256 to contain exactly one line.'
+Assert-Condition ($deploy -match '\[ "\$\{#digest\}" -ne 64 \]') 'Deploy must require a 64-character SHA-256 digest in current.env.sha256.'
+Assert-Condition ($deploy -match '\*\[!0123456789abcdef\]\*') 'Deploy must require a lowercase hex SHA-256 digest in current.env.sha256.'
+Assert-Condition ($deploy -match '\*"  current\.env"\)\ ;;') 'Deploy must require current.env.sha256 to name literal current.env.'
 Assert-Condition ($backupPosition -ge 0 -and $backupPosition -lt $migratePosition) 'Deploy must back up before migration.'
 Assert-Condition ($verifyPosition -gt $backupPosition -and $verifyPosition -lt $migratePosition) 'Deploy must restore-verify before migration.'
 Assert-Condition ($appUpPosition -gt $migratePosition) 'Deploy must start only the app after migration.'

@@ -20,21 +20,38 @@ case "$MIGRATION_COMPATIBILITY" in
   *) echo "ABORT: MIGRATION_COMPATIBILITY must be backward-compatible or incompatible" >&2; exit 80 ;;
 esac
 
-PREFLIGHT_MODE=runtime "$SCRIPT_DIR/preflight.sh" >/dev/null
-
-lock_dir="$PROJECT_ROOT/.deploy-lock"
-if ! mkdir "$lock_dir" 2>/dev/null; then
-  echo "ABORT: another deployment holds the project lock" >&2
-  exit 80
-fi
-cleanup_lock() { rmdir "$lock_dir" 2>/dev/null || true; }
-trap cleanup_lock EXIT HUP INT TERM
-
-docker image inspect "$APP_IMAGE" >/dev/null
-
 state_dir="$PROJECT_ROOT/deployment-state"
 previous_state="$state_dir/current.env"
 pending_state="$state_dir/pending.env"
+
+require_canonical_current_env_sha256() {
+  hash_file=$1
+  line_count=$(wc -l <"$hash_file" | awk '{print $1}')
+  if [ "$line_count" -ne 1 ]; then
+    echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+    exit 81
+  fi
+  line=$(sed -n '1p' "$hash_file")
+  digest=${line%  current.env}
+  case "$line" in
+    *"  current.env") ;;
+    *)
+      echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+      exit 81
+      ;;
+  esac
+  if [ "${#digest}" -ne 64 ]; then
+    echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+    exit 81
+  fi
+  case "$digest" in
+    *[!0123456789abcdef]*)
+      echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+      exit 81
+      ;;
+  esac
+}
+
 previous_exists=0
 previous_release=''
 previous_image=''
@@ -53,6 +70,7 @@ if [ -e "$previous_state" ] || [ -L "$previous_state" ]; then
     echo "ABORT: current.env.sha256 is missing or not a regular non-symlink file; capture an audited baseline before deployment" >&2
     exit 81
   fi
+  require_canonical_current_env_sha256 "$previous_state.sha256"
   (cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)
   previous_exists=1
   previous_release=$(sed -n 's/^RELEASE_ROOT=//p' "$previous_state")
@@ -62,6 +80,18 @@ if [ -e "$previous_state" ] || [ -L "$previous_state" ]; then
   previous_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$previous_state")
   previous_initial_admin_handoff=$(sed -n 's/^INITIAL_ADMIN_HANDOFF=//p' "$previous_state")
 fi
+
+PREFLIGHT_MODE=runtime "$SCRIPT_DIR/preflight.sh" >/dev/null
+
+lock_dir="$PROJECT_ROOT/.deploy-lock"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  echo "ABORT: another deployment holds the project lock" >&2
+  exit 80
+fi
+cleanup_lock() { rmdir "$lock_dir" 2>/dev/null || true; }
+trap cleanup_lock EXIT HUP INT TERM
+
+docker image inspect "$APP_IMAGE" >/dev/null
 
 require_safe_scalar() {
   value_name=$1
