@@ -5,6 +5,7 @@ import os
 import re
 import uuid
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, time
 from pathlib import Path
@@ -30,6 +31,12 @@ class StoredFile:
     path: Path
     sha256: str
     size: int
+
+
+@dataclass(frozen=True)
+class PendingDeleteFile:
+    original_path: Path
+    quarantine_path: Path
 
 
 def sanitize_component(value: str, *, fallback: str = "未命名", max_length: int = 100) -> str:
@@ -125,14 +132,68 @@ class ReportStorage:
         )
 
     def delete_generation_files(self, paths: Iterable[Path]) -> None:
-        validated: list[Path] = []
-        for path in paths:
-            candidate = self._assert_inside(path)
-            if candidate.exists() and not candidate.is_file():
-                raise UnsafeReportPath("only report files can be deleted")
-            validated.append(candidate)
-        for candidate in validated:
-            candidate.unlink(missing_ok=True)
+        staged = self.stage_pending_delete(paths)
+        self.finalize_pending_delete(staged)
+
+    def stage_pending_delete(self, paths: Iterable[Path]) -> list[PendingDeleteFile]:
+        batch_root = self._assert_inside(self.root / ".pending-delete" / uuid.uuid4().hex)
+        staged: list[PendingDeleteFile] = []
+        try:
+            for path in paths:
+                if path.is_symlink():
+                    raise UnsafeReportPath("report file must not be a symbolic link")
+                candidate = self._assert_inside(path)
+                if candidate.is_symlink() or not candidate.is_file():
+                    raise UnsafeReportPath("only regular report files can be staged for deletion")
+                relative = candidate.relative_to(self.root)
+                quarantine_path = self._assert_inside(batch_root / relative)
+                quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(candidate, quarantine_path)
+                staged.append(
+                    PendingDeleteFile(original_path=candidate, quarantine_path=quarantine_path)
+                )
+        except Exception:
+            self.restore_pending_delete(reversed(staged))
+            raise
+        return staged
+
+    def restore_pending_delete(self, staged: Iterable[PendingDeleteFile]) -> None:
+        restored_roots: set[Path] = set()
+        for item in staged:
+            original_path = self._assert_inside(item.original_path)
+            quarantine_path = self._assert_inside(item.quarantine_path)
+            if not quarantine_path.is_file() or quarantine_path.is_symlink():
+                raise UnsafeReportPath("pending-delete file is missing or unsafe")
+            if original_path.exists():
+                raise FileExistsError(original_path)
+            original_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(quarantine_path, original_path)
+            restored_roots.add(quarantine_path.parent)
+        self._cleanup_empty_pending_dirs(restored_roots)
+
+    def finalize_pending_delete(self, staged: Iterable[PendingDeleteFile]) -> None:
+        touched_dirs: set[Path] = set()
+        for item in staged:
+            quarantine_path = self._assert_inside(item.quarantine_path)
+            if quarantine_path.exists():
+                if quarantine_path.is_symlink() or not quarantine_path.is_file():
+                    raise UnsafeReportPath("pending-delete target is not a regular file")
+                quarantine_path.unlink()
+            touched_dirs.add(quarantine_path.parent)
+        self._cleanup_empty_pending_dirs(touched_dirs)
+
+    def _cleanup_empty_pending_dirs(self, directories: Iterable[Path]) -> None:
+        pending_root = self.root / ".pending-delete"
+        for directory in sorted(set(directories), key=lambda value: len(value.parts), reverse=True):
+            current = self._assert_inside(directory)
+            while current != pending_root and current.is_relative_to(pending_root):
+                try:
+                    current.rmdir()
+                except OSError:
+                    break
+                current = current.parent
+        with suppress(OSError):
+            pending_root.rmdir()
 
     def resolve_existing_file(self, relative_path: str) -> Path:
         requested = Path(relative_path)

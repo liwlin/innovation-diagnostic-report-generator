@@ -74,8 +74,15 @@ def resolve_user_and_session(request: Request, db: Session) -> tuple[User, UserS
         not user.is_active
         or user_session.invalidated_at is not None
         or as_utc(user_session.expires_at) <= now
+        or as_utc(user_session.last_seen_at)
+        <= now - timedelta(minutes=settings.session_idle_timeout_minutes)
     ):
         raise _authentication_required()
+    if as_utc(user_session.last_seen_at) <= now - timedelta(
+        seconds=settings.session_touch_throttle_seconds
+    ):
+        user_session.last_seen_at = now
+        db.commit()
     return user, user_session
 
 

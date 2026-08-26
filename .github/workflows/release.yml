@@ -93,6 +93,18 @@ jobs:
           Copy-Item -LiteralPath assets -Destination $artifact -Recurse
           Copy-Item -LiteralPath shared -Destination $artifact -Recurse
           Copy-Item -LiteralPath vendor -Destination $artifact -Recurse
+          $rootIndex = Join-Path $artifact 'index.html'
+          $indexSource = Get-Content -LiteralPath $rootIndex -Raw -Encoding UTF8
+          $releaseVersion = 'v${{ needs.verify.outputs.semver }}'
+          $releaseCommit = '${{ needs.verify.outputs.release_sha }}'
+          $shortCommit = $releaseCommit.Substring(0, 7)
+          $indexSource = $indexSource.Replace('content="pages-dev"', "content=""$releaseVersion""")
+          $indexSource = $indexSource.Replace('content="local"', "content=""$releaseCommit""")
+          $indexSource = $indexSource.Replace('版本：pages-dev · local', "版本：$releaseVersion · $shortCommit")
+          if (-not $indexSource.Contains('makerseed-app-version')) { throw 'Root Pages version metadata is missing.' }
+          if (-not $indexSource.Contains('makerseed-commit-sha')) { throw 'Root Pages commit metadata is missing.' }
+          if (-not $indexSource.Contains("版本：$releaseVersion · $shortCommit")) { throw 'Root Pages visible version metadata is missing.' }
+          Set-Content -LiteralPath $rootIndex -Value $indexSource -Encoding UTF8
           $sourceName = '科创方向诊断报告生成器.dc.html'
           Copy-Item -LiteralPath 科创方向诊断报告生成器.dc.html -Destination $artifact
           $source = Get-Content -LiteralPath (Join-Path $artifact $sourceName) -Raw -Encoding UTF8

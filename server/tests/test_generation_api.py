@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, time
 from pathlib import Path
 from uuid import UUID
 
@@ -173,3 +174,73 @@ def test_permanent_delete_fails_closed_for_artifact_outside_report_root(
     assert outside_file.read_bytes() == b"must-not-change"
     db_session.expire_all()
     assert db_session.get(Evaluation, UUID(created["evaluation_id"])) is not None
+
+
+def test_permanent_delete_finalize_failure_preserves_db_tombstone_for_retry(
+    app, authenticated_client_factory, db_session, monkeypatch
+):
+    from makerseed_app.reports.storage import PendingDeleteFile, ReportStorage
+
+    owner = authenticated_client_factory(username="finalize-owner")
+    admin = authenticated_client_factory(username="finalize-admin", role="admin")
+    created = _valid_evaluation(owner, name="终删学生")
+    storage = ReportStorage(app.state.settings.report_root)
+    report_dir = storage.resolve_generation_dir(
+        event_date=date.fromisoformat("2026-08-25"),
+        batch_name="批次1",
+        student_name="终删学生",
+        generated_at=time(1, 2, 3),
+    )
+    report_path = storage.write_atomic(report_dir, "报告.pdf", b"pending-finalize").path
+    relative_report_path = report_path.relative_to(app.state.settings.report_root).as_posix()
+    job = GenerationRecord(
+        evaluation_id=UUID(created["evaluation_id"]),
+        created_by_id=owner.user.id,
+        status="completed",
+        input_snapshot={},
+        renderer_version="test",
+        artifact_manifest={
+            "artifacts": [
+                {
+                    "id": "without-pdf",
+                    "variant": "without",
+                    "format": "pdf",
+                    "relative_path": relative_report_path,
+                    "sha256": "0" * 64,
+                    "size": report_path.stat().st_size,
+                    "mime": "application/pdf",
+                }
+            ]
+        },
+    )
+    db_session.add(job)
+    db_session.commit()
+    owner.client.post(
+        f"/api/evaluations/{created['evaluation_id']}/trash",
+        headers={"X-CSRF-Token": owner.csrf},
+    )
+
+    staged_files: list[PendingDeleteFile] = []
+    original_finalize = ReportStorage.finalize_pending_delete
+
+    def fail_finalize(self, staged: list[PendingDeleteFile]) -> None:
+        staged_files.extend(staged)
+        raise OSError("simulated final unlink failure")
+
+    monkeypatch.setattr(ReportStorage, "finalize_pending_delete", fail_finalize)
+
+    response = admin.client.request(
+        "DELETE",
+        f"/api/evaluations/{created['evaluation_id']}",
+        headers={"X-CSRF-Token": admin.csrf},
+        json={"reason": "验证终删后文件清理失败"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["error"]["code"] == "report_finalize_pending"
+    db_session.expire_all()
+    assert db_session.get(Evaluation, UUID(created["evaluation_id"])) is None
+    assert staged_files
+    assert staged_files[0].quarantine_path.is_file()
+
+    original_finalize(storage, staged_files)

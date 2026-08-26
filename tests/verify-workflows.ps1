@@ -36,13 +36,17 @@ function Assert-WorkflowCommonPolicy {
     Assert-Condition ($Source -notmatch 'pull_request_target') "$Name must not use pull_request_target."
     Assert-PinnedActions -Source $Source -Name $Name
     Assert-Condition ($Source -match '(?ms)^permissions:\s*\r?\n\s+contents:\s+read\s*(?:\r?\n(?!\S).*)?') "$Name must default to contents: read."
-    Assert-Condition ($Source -notmatch '(?m)^\s*(?:tags|image-ref|image|PYTHON_IMAGE):[^\r\n]*:latest(?:\s|$)') "$Name must not publish or depend on latest tags."
+    $withoutRunnerLabels = $Source -replace '(?m)^\s*runs-on:\s+ubuntu-latest\s*$', ''
+    Assert-Condition ($withoutRunnerLabels -notmatch '(?m)(^|[\s''"])[a-z0-9][a-z0-9._/-]*:[Ll][Aa][Tt][Ee][Ss][Tt]([\s''"]|$)') "$Name must not publish or depend on latest container tags."
 }
 
 $ci = Read-RequiredWorkflow -Path $ciPath -Name 'ci.yml'
 $release = Read-RequiredWorkflow -Path $releasePath -Name 'release.yml'
 Assert-Condition (Test-Path -LiteralPath $dockerfilePath -PathType Leaf) 'deploy/Dockerfile is missing.'
 $dockerfile = Get-Content -LiteralPath $dockerfilePath -Raw -Encoding UTF8
+$indexPath = Join-Path $projectRoot 'index.html'
+Assert-Condition (Test-Path -LiteralPath $indexPath -PathType Leaf) 'index.html is missing.'
+$index = Get-Content -LiteralPath $indexPath -Raw -Encoding UTF8
 
 Assert-WorkflowCommonPolicy -Source $ci -Name 'ci.yml'
 Assert-WorkflowCommonPolicy -Source $release -Name 'release.yml'
@@ -135,6 +139,13 @@ foreach ($token in $pagesRequired) {
 Assert-Condition ($release -notmatch 'Copy-Item[^\r\n]*(server|deploy|nas-web|secrets|\.env)') 'Pages artifact must not copy server, deploy, NAS runtime, secrets, or env data.'
 Assert-Condition ($release -notmatch 'path:\s*\.') 'Pages artifact must not upload the repository root.'
 Assert-Condition ($release -match 'path:\s+\$\{\{\s*runner\.temp\s*\}\}/pages-artifact') 'Pages upload must use the explicit allowlisted artifact directory.'
+Assert-Condition ($index -notmatch 'content=""') 'Root Pages metadata must not contain blank placeholders.'
+Assert-Condition ($index -match 'makerseed-app-version') 'Root Pages metadata must expose the local-mode app version.'
+Assert-Condition ($index -match 'makerseed-commit-sha') 'Root Pages metadata must expose the source commit.'
+Assert-Condition ($index -match '版本') 'Root Pages entry must show version metadata visibly.'
+Assert-Condition ($release -match 'makerseed-app-version') 'Release Pages artifact must render the version into root metadata.'
+Assert-Condition ($release -match 'makerseed-commit-sha') 'Release Pages artifact must render the commit into root metadata.'
+Assert-Condition ($release -match 'Substring\(0,\s*7\)') 'Release Pages artifact must render a short visible commit.'
 
 foreach ($token in @(
     'ARG APP_VERSION=dev',

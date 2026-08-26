@@ -46,6 +46,10 @@ try {
     Assert-Condition ($null -ne $rootResponse) 'Static server did not become ready.'
     Assert-Condition ($rootResponse.StatusCode -eq 200) 'Root route did not return HTTP 200.'
     Assert-Condition ($rootResponse.Content -notmatch 'Directory listing for') 'Root route exposes a directory listing instead of the application.'
+    Assert-Condition ($rootResponse.Content -notmatch 'content=""') 'Root route contains blank release metadata placeholders.'
+    Assert-Condition ($rootResponse.Content -match 'makerseed-app-version') 'Root route is missing app-version metadata.'
+    Assert-Condition ($rootResponse.Content -match 'makerseed-commit-sha') 'Root route is missing commit metadata.'
+    Assert-Condition ($rootResponse.Content -match '版本') 'Root route does not visibly show local-mode version metadata.'
 
     $runtimePaths = @(
         '/科创方向诊断报告生成器.dc.html',

@@ -128,3 +128,63 @@ def test_delete_refuses_path_outside_report_root(tmp_path: Path):
         storage.delete_generation_files([company_file])
 
     assert company_file.read_bytes() == b"must-not-change"
+
+
+def test_quarantine_restore_returns_files_to_exact_original_paths(tmp_path: Path):
+    from makerseed_app.reports.storage import ReportStorage
+
+    storage = ReportStorage(tmp_path)
+    directory = storage.resolve_generation_dir(
+        event_date=date(2026, 8, 25),
+        batch_name="批次1",
+        student_name="张三",
+        generated_at=time(1, 2, 3),
+    )
+    first = storage.write_atomic(directory, "报告.pdf", b"first").path
+    second = storage.write_atomic(directory, "报告.png", b"second").path
+
+    staged = storage.stage_pending_delete([first, second])
+
+    assert not first.exists()
+    assert not second.exists()
+    assert all(item.quarantine_path.is_file() for item in staged)
+
+    storage.restore_pending_delete(staged)
+
+    assert first.read_bytes() == b"first"
+    assert second.read_bytes() == b"second"
+    assert not any((tmp_path / ".pending-delete").rglob("*.*"))
+
+
+def test_quarantine_finalize_unlinks_only_staged_project_files(tmp_path: Path):
+    from makerseed_app.reports.storage import ReportStorage
+
+    storage = ReportStorage(tmp_path)
+    directory = storage.resolve_generation_dir(
+        event_date=date(2026, 8, 25),
+        batch_name="批次1",
+        student_name="张三",
+        generated_at=time(1, 2, 3),
+    )
+    report = storage.write_atomic(directory, "报告.pdf", b"final").path
+
+    staged = storage.stage_pending_delete([report])
+    storage.finalize_pending_delete(staged)
+
+    assert not report.exists()
+    assert not staged[0].quarantine_path.exists()
+
+
+def test_quarantine_refuses_symlinked_report_file(tmp_path: Path):
+    from makerseed_app.reports.storage import ReportStorage, UnsafeReportPath
+
+    storage = ReportStorage(tmp_path)
+    target = tmp_path / "outside.txt"
+    target.write_bytes(b"outside")
+    link = tmp_path / "report-link.pdf"
+    link.symlink_to(target)
+
+    with pytest.raises(UnsafeReportPath):
+        storage.stage_pending_delete([link])
+
+    assert target.read_bytes() == b"outside"

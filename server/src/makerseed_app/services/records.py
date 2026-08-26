@@ -12,7 +12,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from ..errors import ApiError
 from ..models import Batch, Evaluation, EvaluationVersion, GenerationRecord, Student, User
-from ..reports.storage import ReportStorage, UnsafeReportPath
+from ..reports.storage import PendingDeleteFile, ReportStorage, UnsafeReportPath
 from ..schemas.records import BatchCreate, EvaluationCreate, EvaluationUpdate
 from .audit import write_audit_event
 
@@ -269,6 +269,7 @@ def permanently_delete_evaluation(
     student = db.get(Student, evaluation.student_id)
     if student is None:
         raise ApiError("evaluation_corrupt", "记录关联不完整，请联系管理员", 500)
+    staged_files: list[PendingDeleteFile] = []
     if storage is not None:
         artifact_paths: list[Path] = []
         jobs = db.scalars(
@@ -286,9 +287,9 @@ def permanently_delete_evaluation(
                 500,
             ) from error
         try:
-            storage.delete_generation_files(artifact_paths)
-        except OSError as error:
-            raise ApiError("report_cleanup_failed", "报告文件删除失败，记录未删除", 500) from error
+            staged_files = storage.stage_pending_delete(artifact_paths)
+        except (OSError, UnsafeReportPath) as error:
+            raise ApiError("report_cleanup_failed", "报告文件隔离失败，记录未删除", 500) from error
     write_audit_event(
         db,
         actor_user_id=actor.id,
@@ -301,7 +302,38 @@ def permanently_delete_evaluation(
     db.delete(evaluation)
     db.flush()
     db.delete(student)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        if storage is not None and staged_files:
+            storage.restore_pending_delete(reversed(staged_files))
+        raise
+    if storage is not None and staged_files:
+        try:
+            storage.finalize_pending_delete(staged_files)
+        except (OSError, UnsafeReportPath) as error:
+            write_audit_event(
+                db,
+                actor_user_id=actor.id,
+                action="report_delete_finalize_pending",
+                target_type="evaluation",
+                target_id=evaluation_id,
+                target_label="",
+                metadata={
+                    "reason": reason,
+                    "pending_files": [
+                        str(item.quarantine_path.relative_to(storage.root)) for item in staged_files
+                    ],
+                    "error": type(error).__name__,
+                },
+            )
+            db.commit()
+            raise ApiError(
+                "report_finalize_pending",
+                "记录已永久删除，报告文件隔离清理待管理员重试",
+                202,
+            ) from error
 
 
 def _encode_cursor(updated_at: datetime, evaluation_id: UUID) -> str:

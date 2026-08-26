@@ -41,31 +41,74 @@ previous_exists=0
 previous_release=''
 previous_image=''
 previous_version=''
+previous_db_image=''
+previous_db_config_hash=''
 if [ -f "$previous_state" ] && [ ! -L "$previous_state" ]; then
   previous_exists=1
   previous_release=$(sed -n 's/^RELEASE_ROOT=//p' "$previous_state")
   previous_image=$(sed -n 's/^APP_IMAGE=//p' "$previous_state")
   previous_version=$(sed -n 's/^APP_VERSION=//p' "$previous_state")
+  previous_db_image=$(sed -n 's/^DB_IMAGE=//p' "$previous_state")
+  previous_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$previous_state")
 fi
 
-compose up -d db
-db_container=$(compose ps -q db)
-attempt=0
-until [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$db_container")" = "healthy" ]; do
-  attempt=$((attempt + 1))
-  [ "$attempt" -lt 60 ] || { echo "ABORT: database health timeout" >&2; exit 81; }
-  sleep 2
-done
+db_config_hash() {
+  container_id=$1
+  docker inspect --format '{{json .Config.Image}}{{json .HostConfig.Binds}}{{json .Mounts}}{{json .HostConfig.NetworkMode}}{{json .Config.Labels}}' "$container_id" | sha256sum | awk '{print $1}'
+}
+
+verify_existing_db_state() {
+  db_container=$(compose ps -q db)
+  if [ -z "$db_container" ]; then
+    echo "ABORT: upgrade requires the existing db container to be running before deployment" >&2
+    exit 81
+  fi
+  owner_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$db_container")
+  owner_dir=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$db_container")
+  if [ "$owner_project" != "makerseed-diagnostic" ] || [ "$owner_dir" != "$PROJECT_ROOT" ]; then
+    echo "ABORT: running db container does not match the recorded project identity" >&2
+    exit 81
+  fi
+  health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$db_container")
+  if [ "$health" != "healthy" ]; then
+    echo "ABORT: existing db container is not healthy" >&2
+    exit 81
+  fi
+  current_db_image=$(docker inspect --format '{{.Config.Image}}' "$db_container")
+  current_db_config_hash=$(db_config_hash "$db_container")
+  if [ -z "$previous_db_image" ] || [ -z "$previous_db_config_hash" ]; then
+    echo "ABORT: previous deployment state lacks DB image/config proof; refusing upgrade drift" >&2
+    exit 81
+  fi
+  if [ "$current_db_image" != "$previous_db_image" ] || [ "$current_db_config_hash" != "$previous_db_config_hash" ]; then
+    echo "ABORT: existing db image or container config drifted from persisted state" >&2
+    exit 81
+  fi
+}
 
 backup_file=''
 if [ "$previous_exists" -eq 1 ]; then
+  verify_existing_db_state
   backup_result=$("$SCRIPT_DIR/backup.sh")
   backup_file=${backup_result#BACKUP_OK: }
   "$SCRIPT_DIR/restore-verify.sh" --backup "$backup_file" >/dev/null
 fi
+if [ "$previous_exists" -eq 0 ]; then
+  compose up -d db
+  db_container=$(compose ps -q db)
+  attempt=0
+  until [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$db_container")" = "healthy" ]; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 60 ] || { echo "ABORT: database health timeout" >&2; exit 81; }
+    sleep 2
+  done
+fi
+db_container=$(compose ps -q db)
+db_image=$(docker inspect --format '{{.Config.Image}}' "$db_container")
+db_container_config_hash=$(db_config_hash "$db_container")
 
-printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nSCHEMA_COMPATIBLE=%s\nBACKUP_FILE=%s\nPREVIOUS_RELEASE_ROOT=%s\nPREVIOUS_APP_IMAGE=%s\nPREVIOUS_APP_VERSION=%s\n' \
-  "$RELEASE_ROOT" "$APP_IMAGE" "$APP_VERSION" "$schema_compatible" "$backup_file" \
+printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nDB_IMAGE=%s\nDB_CONTAINER_CONFIG_HASH=%s\nSCHEMA_COMPATIBLE=%s\nBACKUP_FILE=%s\nPREVIOUS_RELEASE_ROOT=%s\nPREVIOUS_APP_IMAGE=%s\nPREVIOUS_APP_VERSION=%s\n' \
+  "$RELEASE_ROOT" "$APP_IMAGE" "$APP_VERSION" "$db_image" "$db_container_config_hash" "$schema_compatible" "$backup_file" \
   "$previous_release" "$previous_image" "$previous_version" >"$pending_state"
 chmod 600 "$pending_state"
 sha256sum "$pending_state" >"$pending_state.sha256"
@@ -81,7 +124,7 @@ rollback_on_error() {
 trap rollback_on_error EXIT HUP INT TERM
 
 "$SCRIPT_DIR/migrate.sh"
-compose up -d --no-deps app
+compose up -d --no-deps --force-recreate app
 app_container=$(compose ps -q app)
 attempt=0
 until [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$app_container")" = "healthy" ]; do

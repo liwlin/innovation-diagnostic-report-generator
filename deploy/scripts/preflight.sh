@@ -10,10 +10,18 @@ require_exact_project_root
 : "${SECRETS_ROOT:?SECRETS_ROOT is required}"
 : "${REPORT_ROOT:?REPORT_ROOT is required}"
 : "${PREFLIGHT_NONCE:?PREFLIGHT_NONCE is required}"
+: "${REPORT_ROOT_PHASE:=isolated}"
 
 MIN_DOCKER_VERSION=${MIN_DOCKER_VERSION:-24.0.0}
 MIN_COMPOSE_VERSION=${MIN_COMPOSE_VERSION:-2.20.0}
-APPROVED_REPORT_ROOT=${APPROVED_REPORT_ROOT:-/volume1/科创诊断报告}
+ISOLATED_REPORT_ROOT="$PROJECT_ROOT/reports-staging"
+PROMOTED_REPORT_ROOT=/volume1/科创诊断报告
+
+case "$REPORT_ROOT_PHASE" in
+  isolated) APPROVED_REPORT_ROOT=$ISOLATED_REPORT_ROOT ;;
+  promoted) APPROVED_REPORT_ROOT=$PROMOTED_REPORT_ROOT ;;
+  *) echo "ABORT: REPORT_ROOT_PHASE must be isolated or promoted" >&2; exit 50 ;;
+esac
 
 case "$PREFLIGHT_NONCE" in
   [A-Za-z0-9._-][A-Za-z0-9._-][A-Za-z0-9._-][A-Za-z0-9._-]*) ;;
@@ -113,8 +121,8 @@ if [ ! -f "$RELEASE_ROOT/compose.yaml" ] || [ ! -f "$RELEASE_ROOT/Dockerfile" ];
 fi
 resolved_release=$(readlink -f "$RELEASE_ROOT")
 case "$resolved_release" in
-  "$PROJECT_ROOT"/releases/*/deploy|"$PROJECT_ROOT"/current/deploy) ;;
-  *) echo "ABORT: RELEASE_ROOT must be a deploy release path" >&2; exit 52 ;;
+  "$PROJECT_ROOT"/releases/*/deploy) ;;
+  *) echo "ABORT: RELEASE_ROOT must match $PROJECT_ROOT/releases/*/deploy" >&2; exit 52 ;;
 esac
 
 free_kb=$(df -Pk /volume1/docker | awk 'NR==2 {print $4}')
@@ -189,7 +197,7 @@ resolved_report=$(readlink -f "$REPORT_ROOT")
 resolved_report=$(canonical_bind_source "$REPORT_ROOT" "$APPROVED_REPORT_ROOT" exact)
 case "$resolved_report" in
   "$APPROVED_REPORT_ROOT") ;;
-  *) echo "ABORT: REPORT_ROOT must resolve exactly to the approved File Station share" >&2; exit 59 ;;
+  *) echo "ABORT: REPORT_ROOT must resolve exactly to the approved $REPORT_ROOT_PHASE report root" >&2; exit 59 ;;
 esac
 case "$resolved_report" in
   *company*|*Company*|*公司*) echo "ABORT: report mount must not target company shares" >&2; exit 59 ;;
@@ -203,7 +211,7 @@ done
 
 for resolved_mount in "$resolved_data" "$resolved_backups" "$resolved_report" "$resolved_init"; do
   case "$resolved_mount" in
-    "$PROJECT_ROOT"/data/postgres|"$PROJECT_ROOT"/backups|"$APPROVED_REPORT_ROOT"|"$RELEASE_ROOT"/postgres-init/10-create-runtime-role.sh) ;;
+    "$PROJECT_ROOT"/data/postgres|"$PROJECT_ROOT"/backups|"$ISOLATED_REPORT_ROOT"|"$PROMOTED_REPORT_ROOT"|"$RELEASE_ROOT"/postgres-init/10-create-runtime-role.sh) ;;
     *) echo "ABORT: resolved mount is outside approved roots" >&2; exit 59 ;;
   esac
 done
@@ -219,4 +227,4 @@ if [ -e "$PROJECT_ROOT" ]; then
   done
 fi
 
-printf '{"result":"pass","nonce":"%s","architecture":"x86_64","project_root":"%s","port":18081,"app_image":"%s","compose_version":"%s","report_root":"%s"}\n' "$PREFLIGHT_NONCE" "$PROJECT_ROOT" "$APP_IMAGE" "$compose_version" "$resolved_report"
+printf '{"result":"pass","nonce":"%s","architecture":"x86_64","project_root":"%s","port":18081,"app_image":"%s","compose_version":"%s","report_root_phase":"%s","report_root":"%s"}\n' "$PREFLIGHT_NONCE" "$PROJECT_ROOT" "$APP_IMAGE" "$compose_version" "$REPORT_ROOT_PHASE" "$resolved_report"

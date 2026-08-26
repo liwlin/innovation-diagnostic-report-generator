@@ -53,6 +53,14 @@ Assert-Condition ($restore -match 'dropdb') 'Restore verification does not clean
 Assert-Condition ($restore -notmatch 'pg_restore[^\r\n]*makerseed(?:\s|"|''|$)') 'Restore script may target the live makerseed database.'
 
 $preflight = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/preflight.sh') -Raw -Encoding UTF8
+$envExample = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/env.example') -Raw -Encoding UTF8
+$composeYaml = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/compose.yaml') -Raw -Encoding UTF8
+Assert-Condition ($envExample -match 'REPORT_ROOT_PHASE=isolated') 'env.example must default hardware preflight to the isolated report-root phase.'
+Assert-Condition ($envExample -match 'REPORT_ROOT=/volume1/docker/makerseed-diagnostic/reports-staging') 'env.example must default reports to project-owned staging before File Station promotion.'
+Assert-Condition ($envExample -match 'RELEASE_ROOT=/volume1/docker/makerseed-diagnostic/releases/.+/deploy') 'env.example must use an immutable release deploy path.'
+Assert-Condition ($envExample -notmatch 'current/deploy') 'env.example must not point RELEASE_ROOT at mutable current/deploy.'
+Assert-Condition ($envExample -notmatch '(?m)^APP_IMAGE=.*:[^@\r\n]+@sha256:' -and $envExample -match '(?m)^APP_IMAGE=ghcr\.io/liwlin/innovation-diagnostic-report-generator@sha256:' ) 'env.example must prefer digest-only APP_IMAGE references.'
+Assert-Condition ($composeYaml -match 'source:\s*\$\{REPORT_ROOT') 'Compose must mount the explicit phase-validated REPORT_ROOT.'
 foreach ($mutation in @('mkdir', 'touch', 'docker pull', 'docker load', 'docker-compose up', 'mv ', 'cp ')) {
     Assert-Condition ($preflight -notlike "*$mutation*") "Preflight must remain read-only; found: $mutation"
 }
@@ -61,6 +69,11 @@ Assert-Condition ($preflight -match 'MIN_COMPOSE_VERSION') 'Preflight must enfor
 Assert-Condition ($preflight -match 'stat -c %a') 'Preflight must validate secret file modes.'
 Assert-Condition ($preflight -match 'REPORT_ROOT') 'Preflight must validate the declared report mount root.'
 Assert-Condition ($preflight -match 'readlink -f "\$REPORT_ROOT"') 'Preflight must resolve declared mounts before approval.'
+Assert-Condition ($preflight -match 'REPORT_ROOT_PHASE') 'Preflight must require an explicit isolated/promoted report-root phase.'
+Assert-Condition ($preflight -match 'reports-staging') 'Isolated hardware preflight must approve only the project-owned reports-staging root.'
+Assert-Condition ($preflight -match '/volume1/科创诊断报告') 'Promoted preflight must approve only the final encrypted File Station share.'
+Assert-Condition ($preflight -notmatch 'current/deploy') 'Preflight must not accept the mutable current/deploy symlink as a release input.'
+Assert-Condition ($preflight -match 'releases/\*/deploy') 'Preflight must require immutable release deploy paths.'
 foreach ($bindSource in @('data/postgres', 'backups', 'postgres-init/10-create-runtime-role.sh')) {
     Assert-Condition ($preflight -like "*$bindSource*") "Preflight must validate bind source: $bindSource"
 }
@@ -84,11 +97,18 @@ $deploy = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/deplo
 $backupPosition = $deploy.IndexOf('backup.sh')
 $verifyPosition = $deploy.IndexOf('restore-verify.sh')
 $migratePosition = $deploy.IndexOf('migrate.sh')
-$appUpPosition = $deploy.IndexOf('compose up -d --no-deps app')
+$appUpPosition = $deploy.IndexOf('compose up -d --no-deps --force-recreate app')
+$dbUpPosition = $deploy.IndexOf('compose up -d db')
 $smokePosition = $deploy.IndexOf('smoke.sh')
 Assert-Condition ($backupPosition -ge 0 -and $backupPosition -lt $migratePosition) 'Deploy must back up before migration.'
 Assert-Condition ($verifyPosition -gt $backupPosition -and $verifyPosition -lt $migratePosition) 'Deploy must restore-verify before migration.'
 Assert-Condition ($appUpPosition -gt $migratePosition) 'Deploy must start only the app after migration.'
+Assert-Condition ($dbUpPosition -lt 0 -or $dbUpPosition -gt $backupPosition) 'Upgrade deployment must not start/reconcile db before backup.'
+Assert-Condition ($deploy -match 'previous_exists.*-eq 0') 'Deploy must separate first-install database creation from upgrade handling.'
+Assert-Condition ($deploy -match 'verify_existing_db_state') 'Deploy must verify existing DB identity, health, and persisted state before upgrade backup.'
+Assert-Condition ($deploy -match 'DB_IMAGE=') 'Deploy state must persist the DB image/digest used for drift detection.'
+Assert-Condition ($deploy -match 'DB_CONTAINER_CONFIG_HASH=') 'Deploy state must persist a DB config hash for upgrade drift detection.'
+Assert-Condition ($deploy -match 'compose up -d --no-deps --force-recreate app') 'Ordinary deploy must recreate only app without reconciling db.'
 Assert-Condition ($smokePosition -gt $appUpPosition) 'Deploy must smoke-test after app startup.'
 Assert-Condition ($deploy -match 'rollback\.sh') 'Deploy does not invoke rollback on failure.'
 Assert-Condition ($deploy -match 'docker image inspect "\$APP_IMAGE"') 'Deploy must verify the requested digest-pinned app image.'

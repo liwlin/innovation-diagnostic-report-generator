@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from makerseed_app.security.rate_limit import as_utc
+
 
 def _cookie_header(response, name: str) -> str:
     return next(
@@ -112,7 +114,6 @@ def test_expired_session_is_rejected(client, teacher, db_session):
     assert _login(client).status_code == 200
 
     from makerseed_app.models import Session
-
     session = db_session.scalar(select(Session).where(Session.user_id == teacher.id))
     assert session is not None
     session.expires_at = datetime.now(UTC) - timedelta(seconds=1)
@@ -122,6 +123,55 @@ def test_expired_session_is_rejected(client, teacher, db_session):
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "authentication_required"
+
+
+def test_idle_session_timeout_uses_last_seen_at(client, teacher, db_session, settings):
+    settings.session_idle_timeout_minutes = 30
+    assert _login(client).status_code == 200
+
+    from makerseed_app.models import Session
+
+    session = db_session.scalar(select(Session).where(Session.user_id == teacher.id))
+    assert session is not None
+    session.last_seen_at = datetime.now(UTC) - timedelta(minutes=31)
+    db_session.commit()
+
+    response = client.get("/api/session")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "authentication_required"
+
+
+def test_active_session_last_seen_updates_only_after_throttle(
+    client, teacher, db_session, settings
+):
+    settings.session_idle_timeout_minutes = 30
+    settings.session_touch_throttle_seconds = 300
+    assert _login(client).status_code == 200
+
+    from makerseed_app.models import Session
+
+    session = db_session.scalar(select(Session).where(Session.user_id == teacher.id))
+    assert session is not None
+    recent = datetime.now(UTC) - timedelta(seconds=30)
+    session.last_seen_at = recent
+    db_session.commit()
+
+    assert client.get("/api/session").status_code == 200
+    db_session.expire_all()
+    session = db_session.scalar(select(Session).where(Session.user_id == teacher.id))
+    assert session is not None
+    assert as_utc(session.last_seen_at) == recent
+
+    stale = datetime.now(UTC) - timedelta(minutes=6)
+    session.last_seen_at = stale
+    db_session.commit()
+
+    assert client.get("/api/session").status_code == 200
+    db_session.expire_all()
+    session = db_session.scalar(select(Session).where(Session.user_id == teacher.id))
+    assert session is not None
+    assert as_utc(session.last_seen_at) > stale
 
 
 def test_disabling_user_invalidates_an_existing_session(client, teacher, db_session):

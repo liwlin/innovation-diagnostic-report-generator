@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -14,20 +15,23 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_runtime_role_can_insert_but_cannot_modify_or_delete_audit_rows():
+    event_id = uuid4()
     engine = create_engine(RUNTIME_URL)
     with engine.begin() as connection:
-        event_id = connection.scalar(
+        inserted_id = connection.scalar(
             text(
                 """
                 INSERT INTO audit_events
                     (id, actor_user_id, action, target_type, target_id, target_label,
                      event_metadata, created_at)
                 VALUES
-                    (gen_random_uuid(), NULL, 'grant_probe', 'system', NULL, '', '{}'::jsonb, now())
+                    (:id, NULL, 'grant_probe', 'system', NULL, '', '{}'::jsonb, now())
                 RETURNING id
                 """
-            )
+            ),
+            {"id": event_id},
         )
+    assert inserted_id == event_id
     with pytest.raises(ProgrammingError), engine.begin() as connection:
         connection.execute(
             text("UPDATE audit_events SET action='tampered' WHERE id=:id"),
