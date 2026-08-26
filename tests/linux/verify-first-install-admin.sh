@@ -257,6 +257,9 @@ EOF
 #!/bin/sh
 set -eu
 printf '%s\n' "mv $*" >> "$FAKE_DOCKER_LOG"
+if [ "${FAKE_FAIL_MANUAL_HELPER_MV:-}" = "smoke-dest" ] && [ "$#" -eq 2 ] && [ "$2" = "/volume1/docker/makerseed-diagnostic/secrets/manual_rollback_smoke_test_password" ]; then
+  exit 102
+fi
 if [ "${FAKE_FAIL_DEPLOY_MV:-}" = "final-hash" ] && [ "$#" -eq 2 ] && [ "$1" = "current.env.sha256" ] && [ "$2" = "/volume1/docker/makerseed-diagnostic/deployment-state/current.env.sha256" ]; then
   exit 97
 fi
@@ -274,6 +277,17 @@ if [ "${FAKE_FAIL_ROLLBACK_MV:-}" = "state-hash" ] && [ "$#" -eq 2 ] && [ "${1##
 fi
 exec /usr/bin/mv "$@"
 EOF
+  cat >"$fake_dir/cp" <<'EOF'
+#!/bin/sh
+set -eu
+printf '%s\n' "cp $*" >> "$FAKE_DOCKER_LOG"
+if [ "${FAKE_FAIL_MANUAL_HELPER_CP:-}" = "smoke-stage" ] && [ "$#" -eq 2 ]; then
+  case "$2" in
+    /volume1/docker/makerseed-diagnostic/secrets/.manual-rollback-credentials.*/test) exit 101 ;;
+  esac
+fi
+exec /usr/bin/cp "$@"
+EOF
   cat >"$fake_dir/ln" <<'EOF'
 #!/bin/sh
 set -eu
@@ -283,7 +297,20 @@ if [ "${FAKE_FAIL_ROLLBACK_LN:-}" = "current" ] && [ "$#" -eq 3 ] && [ "$1" = "-
 fi
 exec /usr/bin/ln "$@"
 EOF
-  chmod 755 "$fake_dir/docker" "$fake_dir/docker-compose" "$fake_dir/curl" "$fake_dir/sha256sum" "$fake_dir/mv" "$fake_dir/ln"
+  cat >"$fake_dir/rm" <<'EOF'
+#!/bin/sh
+set -eu
+printf '%s\n' "rm $*" >> "$FAKE_DOCKER_LOG"
+if [ "${FAKE_FAIL_ROLLBACK_RM:-}" = "manual-credential-cleanup" ]; then
+  for rm_arg in "$@"; do
+    case "$rm_arg" in
+      /volume1/docker/makerseed-diagnostic/secrets/manual_rollback_admin_password|/volume1/docker/makerseed-diagnostic/secrets/manual_rollback_smoke_test_password) exit 103 ;;
+    esac
+  done
+fi
+exec /usr/bin/rm "$@"
+EOF
+  chmod 755 "$fake_dir/docker" "$fake_dir/docker-compose" "$fake_dir/curl" "$fake_dir/sha256sum" "$fake_dir/mv" "$fake_dir/cp" "$fake_dir/ln" "$fake_dir/rm"
   : >"$log_file"
 }
 
@@ -344,6 +371,57 @@ write_manual_rollback_passwords() {
   chmod 600 "$PROJECT_ROOT/secrets/manual_rollback_admin_password" "$PROJECT_ROOT/secrets/manual_rollback_smoke_test_password"
 }
 
+write_manual_rollback_sources() {
+  admin_source=$TMP_DIR/manual-admin-password-source
+  test_source=$TMP_DIR/manual-test-password-source
+  printf '%s\n' "$ADMIN_PASSWORD" >"$admin_source"
+  printf '%s\n' "$SMOKE_PASSWORD" >"$test_source"
+  chmod 600 "$admin_source" "$test_source"
+}
+
+manual_admin_dest() {
+  printf '%s\n' "$PROJECT_ROOT/secrets/manual_rollback_admin_password"
+}
+
+manual_test_dest() {
+  printf '%s\n' "$PROJECT_ROOT/secrets/manual_rollback_smoke_test_password"
+}
+
+assert_no_manual_rollback_credentials() {
+  [ ! -e "$(manual_admin_dest)" ] && [ ! -L "$(manual_admin_dest)" ] || fail "manual helper left admin credential destination"
+  [ ! -e "$(manual_test_dest)" ] && [ ! -L "$(manual_test_dest)" ] || fail "manual helper left smoke credential destination"
+  if find "$PROJECT_ROOT/secrets" -maxdepth 1 -name 'manual_rollback_*prepare.*' -print | grep . >/dev/null 2>&1; then
+    fail "manual helper left this-run temp credential files"
+  fi
+}
+
+run_prepare_manual_rollback_smoke() {
+  fail_helper_cp=${RUN_FAIL_MANUAL_HELPER_CP:-}
+  fail_helper_mv=${RUN_FAIL_MANUAL_HELPER_MV:-}
+  set +e
+  PROJECT_ROOT=$PROJECT_ROOT \
+  SECRETS_ROOT=$PROJECT_ROOT/secrets \
+  PATH="$FAKE_DOCKER_DIR:$PATH" \
+  FAKE_DOCKER_LOG=$FAKE_DOCKER_LOG \
+  FAKE_FAIL_MANUAL_HELPER_CP=$fail_helper_cp \
+  FAKE_FAIL_MANUAL_HELPER_MV=$fail_helper_mv \
+    "$PROJECT_DIR/deploy/scripts/prepare-manual-rollback-smoke.sh" \
+    --admin-username first-admin \
+    --admin-password-file "$admin_source" \
+    --test-password-file "$test_source"
+  helper_status=$?
+  set -e
+  printf '%s\n' "$RUN_MARKER" >"$PROJECT_ROOT/$PROJECT_MARKER"
+  return "$helper_status"
+}
+
+assert_manual_helper_success() {
+  [ "$(cat "$(manual_admin_dest)")" = "$ADMIN_PASSWORD" ] || fail "manual admin credential content mismatch"
+  [ "$(cat "$(manual_test_dest)")" = "$SMOKE_PASSWORD" ] || fail "manual smoke credential content mismatch"
+  [ "$(stat -c %a "$(manual_admin_dest)")" = "600" ] || fail "manual admin credential mode is not 600"
+  [ "$(stat -c %a "$(manual_test_dest)")" = "600" ] || fail "manual smoke credential mode is not 600"
+}
+
 run_deploy() {
   smoke_admin_password_file=${RUN_SMOKE_ADMIN_PASSWORD_FILE:-$PROJECT_ROOT/secrets/initial_admin_password}
   smoke_test_password_file=${RUN_SMOKE_TEST_PASSWORD_FILE:-$PROJECT_ROOT/secrets/smoke_test_password}
@@ -384,6 +462,7 @@ run_rollback() {
   rollback_state_file=$1
   fail_rollback_mv=${RUN_FAIL_ROLLBACK_MV:-}
   fail_rollback_ln=${RUN_FAIL_ROLLBACK_LN:-}
+  fail_rollback_rm=${RUN_FAIL_ROLLBACK_RM:-}
   set +e
   SMOKE_ADMIN_USERNAME=first-admin \
   SMOKE_ADMIN_PASSWORD_FILE=$PROJECT_ROOT/secrets/initial_admin_password \
@@ -397,6 +476,7 @@ run_rollback() {
   FAKE_EXPECTED_TEST_PASSWORD=$SMOKE_PASSWORD \
   FAKE_FAIL_ROLLBACK_MV=$fail_rollback_mv \
   FAKE_FAIL_ROLLBACK_LN=$fail_rollback_ln \
+  FAKE_FAIL_ROLLBACK_RM=$fail_rollback_rm \
     "$PROJECT_DIR/deploy/scripts/rollback.sh" --state "$rollback_state_file"
   rollback_status=$?
   set -e
@@ -405,11 +485,7 @@ run_rollback() {
 }
 
 run_manual_rollback_runbook() {
-  admin_source=$TMP_DIR/manual-admin-password-source
-  test_source=$TMP_DIR/manual-test-password-source
-  printf '%s\n' "$ADMIN_PASSWORD" >"$admin_source"
-  printf '%s\n' "$SMOKE_PASSWORD" >"$test_source"
-  chmod 600 "$admin_source" "$test_source"
+  write_manual_rollback_sources
   awk '
     /^```sh$/ { block += 1; capture = (block == 1); next }
     /^```$/ { capture = 0; next }
@@ -430,6 +506,63 @@ run_manual_rollback_runbook() {
   set -e
   printf '%s\n' "$RUN_MARKER" >"$PROJECT_ROOT/$PROJECT_MARKER"
   return "$rollback_status"
+}
+
+run_manual_helper_interrupted_in_pty() {
+  tty_bin=$TMP_DIR/fake-tty-bin
+  stty_log=$TMP_DIR/stty.log
+  wrapper=$TMP_DIR/manual-helper-interactive-wrapper.sh
+  helper_pid_file=$TMP_DIR/manual-helper.pid
+  mkdir -p "$tty_bin"
+  cat >"$tty_bin/stty" <<'EOF'
+#!/bin/sh
+set -eu
+if [ "$#" -eq 1 ] && [ "$1" = "-g" ]; then
+  echo saved-tty-state
+  exit 0
+fi
+if [ "$#" -eq 1 ] && [ "$1" = "-echo" ]; then
+  printf '%s\n' "stty:-echo" >>"$FAKE_STTY_LOG"
+  exit 0
+fi
+printf '%s\n' "stty:restore:$*" >>"$FAKE_STTY_LOG"
+exit 0
+EOF
+  chmod 755 "$tty_bin/stty"
+  cat >"$wrapper" <<EOF
+#!/bin/sh
+set -eu
+printf '%s\n' "\$\$" >"$helper_pid_file"
+exec env \\
+  PROJECT_ROOT=$PROJECT_ROOT \\
+  SECRETS_ROOT=$PROJECT_ROOT/secrets \\
+  PATH=$tty_bin:/usr/bin:/bin \\
+  FAKE_STTY_LOG=$stty_log \\
+  "$PROJECT_DIR/deploy/scripts/prepare-manual-rollback-smoke.sh" --admin-username first-admin --interactive
+EOF
+  chmod 700 "$wrapper"
+  set +e
+  ( (printf '%s\n' "$ADMIN_PASSWORD"; sleep 5) | script -qfec "sh '$wrapper'" /dev/null >/dev/null 2>&1 ) &
+  runner_pid=$!
+  helper_status=124
+  for _attempt in 1 2 3 4 5 6 7 8 9 10; do
+    [ -f "$helper_pid_file" ] && break
+    sleep 0.1
+  done
+  if [ -f "$helper_pid_file" ]; then
+    kill -TERM "$(cat "$helper_pid_file")" 2>/dev/null || true
+    wait "$runner_pid"
+    helper_status=$?
+  else
+    kill -TERM "$runner_pid" 2>/dev/null || true
+    wait "$runner_pid" 2>/dev/null || true
+  fi
+  set -e
+  printf '%s\n' "$RUN_MARKER" >"$PROJECT_ROOT/$PROJECT_MARKER"
+  [ "$helper_status" -ne 0 ] || fail "manual helper interruption reported success"
+  grep -q '^stty:-echo$' "$stty_log" || fail "manual helper did not disable tty echo in interactive mode"
+  grep -q '^stty:restore:saved-tty-state$' "$stty_log" || fail "manual helper did not restore saved tty state after interruption"
+  assert_no_manual_rollback_credentials
 }
 
 line_number() {
@@ -583,6 +716,15 @@ assert_manual_rollback_rejected_before_mutation() {
   fi
 }
 
+assert_manual_rollback_cleanup_failure_left_rolled_back_state() {
+  expected_db_image=$1
+  expected_db_config_hash=$2
+  assert_manual_rollback_committed "$expected_db_image" "$expected_db_config_hash"
+  if grep -q "APP_VERSION=$ROLLBACK_RELEASE_ID" "$FAKE_STATE_DIR/app-runtime"; then
+    fail "post-commit credential cleanup failure restarted formerly active app"
+  fi
+}
+
 assert_upgrade_rejects_bad_current_hash() {
   reason=$1
   write_install_passwords
@@ -690,6 +832,59 @@ restore_verified_current_state
 printf 'not-a-checksum\n' >>"$PROJECT_ROOT/deployment-state/current.env.sha256"
 assert_upgrade_rejects_bad_current_hash "malformed-extra-line"
 restore_verified_current_state
+
+write_manual_rollback_sources
+: >"$FAKE_DOCKER_LOG"
+run_prepare_manual_rollback_smoke >/dev/null
+assert_manual_helper_success
+rm -f "$(manual_admin_dest)" "$(manual_test_dest)"
+
+write_manual_rollback_sources
+printf '%s\n' 'preexisting-admin-credential' >"$(manual_admin_dest)"
+chmod 600 "$(manual_admin_dest)"
+before_manual_admin_hash=$(sha256sum "$(manual_admin_dest)" | awk '{print $1}')
+: >"$FAKE_DOCKER_LOG"
+if run_prepare_manual_rollback_smoke >/dev/null 2>&1; then
+  fail "manual helper replaced preexisting credential destination"
+fi
+after_manual_admin_hash=$(sha256sum "$(manual_admin_dest)" | awk '{print $1}')
+[ "$before_manual_admin_hash" = "$after_manual_admin_hash" ] || fail "manual helper modified preexisting credential destination"
+[ ! -e "$(manual_test_dest)" ] && [ ! -L "$(manual_test_dest)" ] || fail "manual helper published second credential after preexisting destination refusal"
+rm -f "$(manual_admin_dest)"
+
+write_manual_rollback_sources
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_MANUAL_HELPER_CP=smoke-stage run_prepare_manual_rollback_smoke >/dev/null 2>&1; then
+  fail "manual helper second copy failure reported success"
+fi
+assert_no_manual_rollback_credentials
+
+write_manual_rollback_sources
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_MANUAL_HELPER_MV=smoke-dest run_prepare_manual_rollback_smoke >/dev/null 2>&1; then
+  fail "manual helper second publish failure reported success"
+fi
+assert_no_manual_rollback_credentials
+
+write_manual_rollback_sources
+printf '%s\n' short >"$admin_source"
+chmod 600 "$admin_source"
+: >"$FAKE_DOCKER_LOG"
+if run_prepare_manual_rollback_smoke >/dev/null 2>&1; then
+  fail "manual helper accepted short admin credential"
+fi
+assert_no_manual_rollback_credentials
+
+write_manual_rollback_sources
+printf 'first-line\nsecond-line\n' >"$test_source"
+chmod 600 "$test_source"
+: >"$FAKE_DOCKER_LOG"
+if run_prepare_manual_rollback_smoke >/dev/null 2>&1; then
+  fail "manual helper accepted multiline smoke credential"
+fi
+assert_no_manual_rollback_credentials
+
+run_manual_helper_interrupted_in_pty
 
 stage_manual_rollback_active_release
 manual_db_image=$(sed -n 's/^DB_IMAGE=//p' "$PROJECT_ROOT/deployment-state/current.env")
@@ -802,6 +997,17 @@ rm -f "$PROJECT_ROOT/deployment-state/current.env.before-manual-rollback" \
   "$PROJECT_ROOT/deployment-state/current.env.sha256.before-manual-rollback" \
   "$PROJECT_ROOT/.env.before-manual-rollback" \
   "$PROJECT_ROOT/deployment-state/current.before-manual-rollback"
+
+stage_manual_rollback_active_release
+manual_db_image=$(sed -n 's/^DB_IMAGE=//p' "$PROJECT_ROOT/deployment-state/current.env")
+manual_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$PROJECT_ROOT/deployment-state/current.env")
+write_manual_rollback_passwords
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_ROLLBACK_RM=manual-credential-cleanup run_rollback "$PROJECT_ROOT/deployment-state/current.env" >/dev/null 2>&1; then
+  fail "manual rollback credential cleanup failure reported full success"
+fi
+assert_manual_rollback_cleanup_failure_left_rolled_back_state "$manual_db_image" "$manual_db_config_hash"
+rm -f "$(manual_admin_dest)" "$(manual_test_dest)"
 
 write_install_passwords
 before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')

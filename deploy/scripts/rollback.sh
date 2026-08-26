@@ -247,13 +247,17 @@ restore_manual_rollback_files() {
 }
 
 restore_manual_active_app() {
-  if [ "$manual_state" -eq 1 ] && [ -n "$active_release" ] && [ -n "$active_image" ] && [ -n "$active_version" ]; then
+  if [ "$manual_state" -eq 1 ] && [ "$manual_commit_complete" -eq 0 ] && [ -n "$active_release" ] && [ -n "$active_image" ] && [ -n "$active_version" ]; then
     RELEASE_ROOT=$active_release
     APP_IMAGE=$active_image
     APP_VERSION=$active_version
     export RELEASE_ROOT APP_IMAGE APP_VERSION
     compose up -d --no-deps app || true
   fi
+}
+
+cleanup_manual_smoke_files() {
+  rm -f "$manual_admin_password_file" "$manual_smoke_test_password_file"
 }
 
 rollback_manual_failure() {
@@ -388,7 +392,7 @@ fi
 if [ "$manual_state" -eq 0 ]; then
   ln -sfn "$previous_release" "$PROJECT_ROOT/current"
 else
-  rm -f "$manual_admin_password_file" "$manual_smoke_test_password_file"
+  cleanup_manual_smoke_files
   trap - EXIT HUP INT TERM
 fi
 echo "ROLLBACK_OK: $previous_version"

@@ -238,9 +238,22 @@ Assert-Condition ($manualStagePosition -gt $rollbackSmokePosition) 'Manual rollb
 Assert-Condition ($rollback -match 'manual_commit_started=0' -and $rollback -match 'manual_commit_complete=0') 'Manual rollback must guard multi-file operator-state commit.'
 Assert-Condition ($rollback -match '\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.sha256\.before-manual-rollback' -and $rollback -match 'current\.before-manual-rollback') 'Manual rollback must use exact reserved backups for .env, current state/hash, and current symlink.'
 Assert-Condition ($rollback -match 'restore_manual_active_app\(\)') 'Manual rollback failure must attempt to restore the formerly active app.'
+Assert-Condition ($rollback -match 'manual_commit_complete" -eq 0') 'Manual rollback failure must not restart the formerly active app after a coherent commit completed.'
+Assert-Condition ($rollback -match 'cleanup_manual_smoke_files') 'Manual rollback must make post-commit manual credential cleanup explicit.'
 Assert-Condition ($rollbackSymlinkPosition -gt $manualPublishedHashCheckPosition) 'Manual rollback must switch current symlink only after state/hash are published and verified.'
 Assert-Condition ($manualCommitCompletePosition -gt $rollbackSymlinkPosition) 'Manual rollback must not mark commit complete before the current symlink is verified.'
 Assert-Condition ($rollback -notmatch 'rm -f "\$resolved_state"') 'Automatic pending rollback must not remove or rewrite deployment state owned by deploy.sh.'
+
+$manualHelper = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/prepare-manual-rollback-smoke.sh') -Raw -Encoding UTF8
+Assert-Condition ($manualHelper -match 'refuse_existing_destinations') 'Manual rollback helper must refuse exact destination preexistence before input or copy.'
+Assert-Condition ($manualHelper -match 'helper_stage_dir=\$\(mktemp -d "\$SECRETS_ROOT/\.manual-rollback-credentials\.XXXXXX"\)') 'Manual rollback helper must stage both credentials in a this-run temp directory.'
+Assert-Condition ($manualHelper -match 'trap cleanup_helper EXIT HUP INT TERM') 'Manual rollback helper must install cleanup before disabling tty echo.'
+Assert-Condition ($manualHelper -match 'restore_tty_state') 'Manual rollback helper must restore saved tty state on every exit/signal/error.'
+Assert-Condition ($manualHelper -match 'published_admin=0' -and $manualHelper -match 'published_test=0') 'Manual rollback helper must track destinations published by this run.'
+Assert-Condition ($manualHelper -match 'validate_staged_secret') 'Manual rollback helper must validate staged credential files before publishing.'
+Assert-Condition ($manualHelper -match 'line_count=.*wc -l') 'Manual rollback helper must require exactly one logical line.'
+Assert-Condition ($manualHelper -match 'secret_length.*-lt 12') 'Manual rollback helper must reject credentials shorter than 12 characters.'
+Assert-Condition ($manualHelper -match 'helper_complete=1') 'Manual rollback helper must retain both credentials only after successful publish and validation.'
 
 $rollbackRunbookPath = Join-Path $projectRoot 'deploy/synology/rollback.md'
 Assert-Condition (Test-Path -LiteralPath $rollbackRunbookPath -PathType Leaf) 'Manual rollback runbook is missing.'
