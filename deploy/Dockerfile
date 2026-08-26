@@ -35,6 +35,8 @@ COPY shared /opt/app/static/shared
 COPY vendor /opt/app/static/vendor
 COPY nas-web /opt/app/static/nas-web
 ENV PATH="/opt/app/.venv/bin:${PATH}" \
+    MKSEED_APP_VERSION="${APP_VERSION}" \
+    MKSEED_COMMIT_SHA="${COMMIT_SHA}" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 USER 10001:10001

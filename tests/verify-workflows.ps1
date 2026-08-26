@@ -3,6 +3,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $workflowRoot = Join-Path $projectRoot '.github/workflows'
 $ciPath = Join-Path $workflowRoot 'ci.yml'
 $releasePath = Join-Path $workflowRoot 'release.yml'
+$dockerfilePath = Join-Path $projectRoot 'deploy/Dockerfile'
 
 function Assert-Condition {
     param([bool]$Condition, [string]$Message)
@@ -40,6 +41,8 @@ function Assert-WorkflowCommonPolicy {
 
 $ci = Read-RequiredWorkflow -Path $ciPath -Name 'ci.yml'
 $release = Read-RequiredWorkflow -Path $releasePath -Name 'release.yml'
+Assert-Condition (Test-Path -LiteralPath $dockerfilePath -PathType Leaf) 'deploy/Dockerfile is missing.'
+$dockerfile = Get-Content -LiteralPath $dockerfilePath -Raw -Encoding UTF8
 
 Assert-WorkflowCommonPolicy -Source $ci -Name 'ci.yml'
 Assert-WorkflowCommonPolicy -Source $release -Name 'release.yml'
@@ -65,6 +68,19 @@ Assert-Condition ($ci -match '(?ms)docker-build:.*needs:\s*\[[^\]]*python[^\]]*n
 
 Assert-Condition ($release -match '(?ms)on:\s*\r?\n\s+push:\s*\r?\n\s+tags:\s*\r?\n\s+- [''"]?v\*[''"]?\s*\r?\n\s+workflow_dispatch:') 'Release must run only on v* tags or explicit workflow_dispatch.'
 Assert-Condition ($release -notmatch '(?ms)on:\s*\r?\n\s+push:\s*\r?\n\s+branches:') 'Release must not run on branch pushes.'
+Assert-Condition ($release -notmatch '(?ms)workflow_dispatch:\s*\r?\n\s+inputs:') 'Manual release dispatch must not accept free-form version inputs.'
+Assert-Condition ($release -notmatch '\$\{\{\s*inputs\.version\s*\}\}') 'Release version must never come from workflow_dispatch input.'
+foreach ($token in @(
+    'github.ref_type',
+    'github.ref_name',
+    'git rev-list -n 1',
+    '${{ github.sha }}',
+    'outputs:',
+    'semver: ${{ steps.version.outputs.semver }}',
+    'needs.verify.outputs.semver'
+)) {
+    Assert-Condition ($release -like "*$token*") "Release must derive and share SemVer from the immutable v* tag commit: $token"
+}
 foreach ($token in @(
     'uv run --project server pytest',
     'uv run --project server ruff check',
@@ -74,8 +90,8 @@ foreach ($token in @(
     'tests/verify-compose-security.ps1',
     'tests/verify-deploy-scripts.ps1',
     'tests/verify-workflows.ps1',
-    'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ steps.version.outputs.semver }}',
-    'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ github.sha }}',
+    'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.semver }}',
+    'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.release_sha }}',
     'ghcr.io/liwlin/innovation-diagnostic-report-generator@${{ steps.docker_build.outputs.digest }}',
     'exit-code: ''1''',
     'ignore-unfixed: true',
@@ -87,7 +103,13 @@ foreach ($token in @(
     'push-to-registry: true',
     'release-manifest.json',
     'pages_commit =',
-    'nas_image_digest ='
+    'nas_image_digest =',
+    'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+    'if-no-files-found: error',
+    'retention-days:',
+    'release-evidence',
+    'sbom.cdx.json',
+    'release-manifest.json'
 )) {
     Assert-Condition ($release -like "*$token*") "Release is missing required release gate or artifact token: $token"
 }
@@ -110,5 +132,16 @@ foreach ($token in $pagesRequired) {
 Assert-Condition ($release -notmatch 'Copy-Item[^\r\n]*(server|deploy|nas-web|secrets|\.env)') 'Pages artifact must not copy server, deploy, NAS runtime, secrets, or env data.'
 Assert-Condition ($release -notmatch 'path:\s*\.') 'Pages artifact must not upload the repository root.'
 Assert-Condition ($release -match 'path:\s+\$\{\{\s*runner\.temp\s*\}\}/pages-artifact') 'Pages upload must use the explicit allowlisted artifact directory.'
+
+foreach ($token in @(
+    'ARG APP_VERSION=dev',
+    'ARG COMMIT_SHA=unknown',
+    'org.opencontainers.image.version="${APP_VERSION}"',
+    'org.opencontainers.image.revision="${COMMIT_SHA}"',
+    'MKSEED_APP_VERSION="${APP_VERSION}"',
+    'MKSEED_COMMIT_SHA="${COMMIT_SHA}"'
+)) {
+    Assert-Condition ($dockerfile -like "*$token*") "Dockerfile must pass immutable build metadata into labels and runtime settings: $token"
+}
 
 Write-Output 'PASS: GitHub workflow policy is pinned, least-privilege, test-gated, and release-scoped.'

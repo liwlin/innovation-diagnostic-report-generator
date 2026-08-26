@@ -5,11 +5,6 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Semver release version such as 0.1.0'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -22,8 +17,30 @@ jobs:
   verify:
     name: Re-verify release commit
     runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.version.outputs.semver }}
+      release_sha: ${{ steps.version.outputs.release_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Resolve immutable release tag
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -ne 'tag') {
+            throw 'Release workflow_dispatch must be run against an immutable v* tag ref.'
+          }
+          $refName = '${{ github.ref_name }}'
+          if ($refName -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Release ref must be a v* SemVer tag: $refName"
+          }
+          $tagCommit = (git rev-list -n 1 $refName).Trim()
+          if ($tagCommit -ne '${{ github.sha }}') {
+            throw "Release tag commit $tagCommit does not match workflow SHA ${{ github.sha }}"
+          }
+          "semver=$($refName.TrimStart('v'))" >> $env:GITHUB_OUTPUT
+          "release_sha=${{ github.sha }}" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.12'
@@ -63,19 +80,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Resolve version
-        id: version
-        shell: pwsh
-        run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $semver = '${{ inputs.version }}'
-          } else {
-            $semver = '${{ github.ref_name }}'.TrimStart('v')
-          }
-          if ($semver -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
-            throw "Release version must be SemVer without a leading v: $semver"
-          }
-          "semver=$semver" >> $env:GITHUB_OUTPUT
       - name: Build explicit local-mode Pages artifact
         shell: pwsh
         run: |
@@ -95,8 +99,8 @@ jobs:
           $runtime = @{
             storageMode = 'local'
             apiBaseUrl = ''
-            appVersion = 'v${{ steps.version.outputs.semver }}'
-            commitSha = '${{ github.sha }}'
+            appVersion = 'v${{ needs.verify.outputs.semver }}'
+            commitSha = '${{ needs.verify.outputs.release_sha }}'
           } | ConvertTo-Json -Compress
           Set-Content -LiteralPath (Join-Path $artifact 'runtime-config.js') -Value "window.__MKSEED_RUNTIME__=Object.freeze($runtime);" -Encoding UTF8
           $source = $source.Replace($marker, "<script src=""./runtime-config.js""></script>`n$marker")
@@ -125,19 +129,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Resolve version
-        id: version
-        shell: pwsh
-        run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $semver = '${{ inputs.version }}'
-          } else {
-            $semver = '${{ github.ref_name }}'.TrimStart('v')
-          }
-          if ($semver -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
-            throw "Release version must be SemVer without a leading v: $semver"
-          }
-          "semver=$semver" >> $env:GITHUB_OUTPUT
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ghcr.io
@@ -152,11 +143,11 @@ jobs:
           file: deploy/Dockerfile
           push: true
           tags: |
-            ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ steps.version.outputs.semver }}
-            ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ github.sha }}
+            ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.semver }}
+            ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.release_sha }}
           build-args: |
-            APP_VERSION=v${{ steps.version.outputs.semver }}
-            COMMIT_SHA=${{ github.sha }}
+            APP_VERSION=v${{ needs.verify.outputs.semver }}
+            COMMIT_SHA=${{ needs.verify.outputs.release_sha }}
       - name: Generate SBOM for final image digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
@@ -183,15 +174,24 @@ jobs:
         run: |
           $digest = '${{ steps.docker_build.outputs.digest }}'
           $manifest = [ordered]@{
-            version = 'v${{ steps.version.outputs.semver }}'
-            commit = '${{ github.sha }}'
-            pages_commit = '${{ github.sha }}'
+            version = 'v${{ needs.verify.outputs.semver }}'
+            commit = '${{ needs.verify.outputs.release_sha }}'
+            pages_commit = '${{ needs.verify.outputs.release_sha }}'
             nas_image = "ghcr.io/liwlin/innovation-diagnostic-report-generator@$digest"
             nas_image_digest = $digest
             sbom = 'sbom.cdx.json'
             tags = @(
-              'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ steps.version.outputs.semver }}',
-              'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ github.sha }}'
+              'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.semver }}',
+              'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.release_sha }}'
             )
           }
           $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath release-manifest.json -Encoding UTF8
+      - name: Upload durable release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-evidence
+          path: |
+            sbom.cdx.json
+            release-manifest.json
+          if-no-files-found: error
+          retention-days: 30
