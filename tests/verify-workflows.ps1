@@ -46,6 +46,7 @@ $dockerfile = Get-Content -LiteralPath $dockerfilePath -Raw -Encoding UTF8
 
 Assert-WorkflowCommonPolicy -Source $ci -Name 'ci.yml'
 Assert-WorkflowCommonPolicy -Source $release -Name 'release.yml'
+Assert-Condition (($ci + $release + $dockerfile) -notmatch 'fonts-noto-cjk|NotoSansCJK') 'Workflows and Dockerfile must not use incompatible Noto CJK CFF fonts.'
 
 Assert-Condition ($ci -match '(?ms)on:\s*\r?\n\s+push:\s*\r?\n\s+pull_request:\s*\r?\n\s+workflow_dispatch:') 'CI must run on push, pull_request, and workflow_dispatch.'
 Assert-Condition ($ci -notmatch 'packages:\s+write') 'CI and PR checks must not grant package write permissions.'
@@ -58,7 +59,7 @@ foreach ($token in @(
     'tests/verify-compose-security.ps1',
     'tests/verify-deploy-scripts.ps1',
     'tests/verify-workflows.ps1',
-    'fonts-noto-cjk',
+    'fonts-wqy-zenhei',
     'git grep',
     'push: false',
     'cache-dependency-path: server/uv.lock'
@@ -91,7 +92,7 @@ foreach ($token in @(
     'tests/verify-compose-security.ps1',
     'tests/verify-deploy-scripts.ps1',
     'tests/verify-workflows.ps1',
-    'fonts-noto-cjk',
+    'fonts-wqy-zenhei',
     'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.semver }}',
     'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.release_sha }}',
     'ghcr.io/liwlin/innovation-diagnostic-report-generator@${{ steps.docker_build.outputs.digest }}',

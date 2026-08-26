@@ -71,7 +71,7 @@ services:
       MKSEED_GENERATION_WORKER_ENABLED: "true"
       MKSEED_GENERATION_POLL_SECONDS: "2"
       MKSEED_REPORT_ROOT: /data/reports
-      MKSEED_REPORT_FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+      MKSEED_REPORT_FONT_PATH: ${APP_REPORT_FONT_PATH:-/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc}
       MKSEED_LOGO_MARK_PATH: /opt/app/static/assets/logo-mark.png
       MKSEED_LOGO_LOCKUP_PATH: /opt/app/static/assets/logo-lockup.png
       MKSEED_STATIC_ROOT: /opt/app/static

@@ -118,3 +118,20 @@ def test_parent_layout_contains_no_internal_fields(snapshot_mapping: dict):
 
     assert all(section.title != "内部跟进" for section in parent.sections)
     assert any(section.title == "内部跟进" for section in internal.sections)
+
+
+def test_test_font_resolver_rejects_incompatible_noto_cff_path(monkeypatch, tmp_path: Path):
+    font_path = tmp_path / "NotoSansCJK-Regular.ttc"
+    font_path.write_bytes(b"fake font")
+    monkeypatch.setenv("MKSEED_TEST_CJK_FONT", str(font_path))
+
+    with pytest.raises(AssertionError, match="Noto CJK CFF"):
+        cjk_font_path()
+
+
+def test_test_font_resolver_accepts_wqy_override(monkeypatch, tmp_path: Path):
+    font_path = tmp_path / "wqy-zenhei.ttc"
+    font_path.write_bytes(b"fake font")
+    monkeypatch.setenv("MKSEED_TEST_CJK_FONT", str(font_path))
+
+    assert cjk_font_path() == font_path

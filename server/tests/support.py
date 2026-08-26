@@ -15,14 +15,16 @@ def cjk_font_path() -> Path:
     env_path = os.environ.get("MKSEED_TEST_CJK_FONT")
     candidates = [
         Path(env_path) if env_path else None,
-        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
         Path("C:/Windows/Fonts/simhei.ttf"),
     ]
     for candidate in candidates:
+        if candidate is not None and "NotoSansCJK" in candidate.name:
+            raise AssertionError("Noto CJK CFF fonts are not compatible with ReportLab.")
         if candidate is not None and candidate.is_file():
             return candidate
     raise AssertionError(
-        "No test CJK font found. Install fonts-noto-cjk or set MKSEED_TEST_CJK_FONT."
+        "No test CJK font found. Install fonts-wqy-zenhei or set MKSEED_TEST_CJK_FONT."
     )
 
 

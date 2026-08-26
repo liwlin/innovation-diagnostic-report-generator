@@ -1,26 +1,71 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $composePath = Join-Path $projectRoot 'deploy\compose.yaml'
+$deployRoot = Join-Path $projectRoot 'deploy'
 
 function Assert-Condition {
     param([bool]$Condition, [string]$Message)
     if (-not $Condition) { throw $Message }
 }
 
+function Get-PathComparison {
+    if ($IsWindows) {
+        return [System.StringComparison]::OrdinalIgnoreCase
+    }
+    return [System.StringComparison]::Ordinal
+}
+
+function Normalize-FullPath {
+    param([string]$Path)
+    $separators = [char[]]@(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    [System.IO.Path]::GetFullPath($Path).TrimEnd($separators)
+}
+
+function Test-PathWithinRoot {
+    param([string]$Path, [string]$Root)
+    $comparison = Get-PathComparison
+    $normalizedPath = Normalize-FullPath $Path
+    $normalizedRoot = Normalize-FullPath $Root
+    if ([string]::Equals($normalizedPath, $normalizedRoot, $comparison)) {
+        return $true
+    }
+    foreach ($separator in @(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )) {
+        if ($separator -and $normalizedPath.StartsWith($normalizedRoot + $separator, $comparison)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 Assert-Condition (Test-Path -LiteralPath $composePath -PathType Leaf) 'deploy/compose.yaml is missing.'
+
+$dummyBase = Join-Path ([System.IO.Path]::GetTempPath()) 'makerseed-compose-policy'
+$dummyProjectRoot = Join-Path $dummyBase 'project'
+$dummyReportRoot = Join-Path $dummyBase 'reports'
+$dummySecretsRoot = Join-Path $dummyProjectRoot 'secrets'
+Assert-Condition (Test-PathWithinRoot (Join-Path $dummyProjectRoot 'data/postgres') $dummyProjectRoot) 'Containment self-test must accept a child path.'
+Assert-Condition (-not (Test-PathWithinRoot ($dummyProjectRoot + '-evil') $dummyProjectRoot)) 'Containment self-test must reject sibling-prefix paths.'
 
 $previous = @{
     APP_IMAGE = $env:APP_IMAGE
     PROJECT_ROOT = $env:PROJECT_ROOT
     REPORT_ROOT = $env:REPORT_ROOT
     SECRETS_ROOT = $env:SECRETS_ROOT
+    RELEASE_ROOT = $env:RELEASE_ROOT
 }
 
 try {
     $env:APP_IMAGE = 'ghcr.io/liwlin/innovation-diagnostic-report-generator:test@sha256:' + ('0' * 64)
-    $env:PROJECT_ROOT = 'C:/makerseed-diagnostic'
-    $env:REPORT_ROOT = 'C:/makerseed-report'
-    $env:SECRETS_ROOT = 'C:/makerseed-diagnostic/secrets'
+    $env:PROJECT_ROOT = $dummyProjectRoot
+    $env:REPORT_ROOT = $dummyReportRoot
+    $env:SECRETS_ROOT = $dummySecretsRoot
+    $env:RELEASE_ROOT = $deployRoot
 
     $json = docker compose -f $composePath config --format json
     Assert-Condition ($LASTEXITCODE -eq 0) 'docker compose config failed.'
@@ -64,10 +109,9 @@ try {
     foreach ($volume in @($app.volumes) + @($db.volumes)) {
         if ($volume.type -ne 'bind') { continue }
         $source = [string]$volume.source
-        $normalized = [System.IO.Path]::GetFullPath($source)
-        $allowed = $normalized.StartsWith('C:\makerseed-diagnostic', [System.StringComparison]::OrdinalIgnoreCase) `
-            -or $normalized.StartsWith('C:\makerseed-report', [System.StringComparison]::OrdinalIgnoreCase) `
-            -or $normalized.StartsWith((Join-Path $projectRoot 'deploy'), [System.StringComparison]::OrdinalIgnoreCase)
+        $allowed = (Test-PathWithinRoot $source $dummyProjectRoot) `
+            -or (Test-PathWithinRoot $source $dummyReportRoot) `
+            -or (Test-PathWithinRoot $source $deployRoot)
         Assert-Condition $allowed "Unapproved host bind mount: $source"
     }
 

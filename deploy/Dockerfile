@@ -21,7 +21,7 @@ LABEL org.opencontainers.image.title="MakerSeed Diagnostic Report Generator" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${COMMIT_SHA}"
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends ca-certificates fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 makerseed \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin makerseed
