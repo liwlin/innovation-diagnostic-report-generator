@@ -14,7 +14,7 @@
 
 - Exactly two long-running containers: `app` and `db`.
 - App host port binds only `127.0.0.1`; PostgreSQL publishes no host port.
-- App runs non-root, read-only root filesystem, `cap_drop: ALL`, `no-new-privileges`, bounded PIDs/CPU/memory, and bounded tmpfs.
+- App runs non-root, read-only root filesystem, `cap_drop: ALL`, `no-new-privileges`, bounded CPU affinity/shares, memory, `ulimits.nproc`, and bounded tmpfs.
 - No service may mount Docker Socket, devices, host network, company shares, NAS root, `/volume1`, or any path outside the exact project/report/backup roots.
 - Production images use explicit version plus digest; `latest`, Watchtower, and automatic database major upgrades are forbidden.
 - Existing Container Manager projects, containers, networks, volumes, shared folders, Cloud Sync tasks, QuickConnect, DDNS, router, DNS, and company data remain unchanged.
@@ -118,9 +118,9 @@ Use a digest-pinned Python 3.12 slim Debian base. The build stage installs the l
 
 - [x] **Step 4: Create the two-service Compose file**
 
-`app` uses `user: "10001:10001"`, `read_only: true`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `pids_limit: 128`, `mem_limit: 1536m`, `cpus: 1.5`, bounded `/tmp` tmpfs, loopback port `18081`, project-only report mount, explicit secrets, JSON log rotation, and healthcheck.
+`app` uses `user: "10001:10001"`, `read_only: true`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `mem_limit: 1536m`, `cpuset: "1"`, conservative `cpu_shares`, `ulimits.nproc` at 128, bounded `/tmp` tmpfs, loopback port `18081`, project-only report mount, explicit secrets, JSON log rotation, and healthcheck. DS220+ hardware evidence showed cgroup v1 without mounted CFS quota/period files, so Compose `cpus` is intentionally not used.
 
-`db` uses a digest-pinned supported PostgreSQL major, `user: "999:999"` after pre-created directory ownership, `read_only: true`, `cap_drop: [ALL]`, `security_opt`, `pids_limit`, `mem_limit: 2048m`, `cpus: 1.0`, `/tmp` and `/var/run/postgresql` tmpfs, project-only data/backup mounts, file-based password, log rotation, and `pg_isready` healthcheck. It uses no host port.
+`db` uses a digest-pinned supported PostgreSQL major, `user: "999:999"` after pre-created directory ownership, `read_only: true`, `cap_drop: [ALL]`, `security_opt`, `mem_limit: 2048m`, `cpuset: "0"`, conservative `cpu_shares`, `ulimits.nproc` at 256, `/tmp` and `/var/run/postgresql` tmpfs, project-only data/backup mounts, file-based password, log rotation, and `pg_isready` healthcheck. It uses no host port.
 
 The shared Docker network is `internal: true`. The app depends on `db` with `condition: service_healthy` supported by the verified Synology Compose version.
 
@@ -392,7 +392,7 @@ Create only `/volume1/docker/makerseed-diagnostic` children. Generate database/s
 
 - [ ] **Step 5: Start two containers and inspect hardening**
 
-Run `docker-compose -p makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, PIDs/memory/CPU limits, internal network, and only approved mounts.
+Run `docker-compose -p makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, internal network, and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
 
 - [ ] **Step 6: Execute real PostgreSQL and browser workflows through the tunnel**
 

@@ -79,8 +79,8 @@ DSM 反向代理承担 TLS 终止和入口转发，因此不再增加 Nginx 容�
 
 ### 4.2 资源预算
 
-- `app`：内存上限约 1.5 GiB，CPU 上限约 1.5 核，进程数受限。
-- `db`：内存上限约 2 GiB，CPU 上限约 1 核，连接池保持小规模。
+- `app`：内存上限约 1.5 GiB；DS220+ 的 cgroup v1 未暴露 CFS quota/period，因此不用 Compose `cpus`，改为固定 `cpuset: "1"`、保守 `cpu_shares` 和 `ulimits.nproc` 进程数上限。
+- `db`：内存上限约 2 GiB；固定 `cpuset: "0"`、保守 `cpu_shares` 和 `ulimits.nproc`，连接池保持小规模。
 - 报告任务：单任务执行，禁止无界队列和并行图片渲染。
 - 容器总预算不得挤占 DSM 文件服务和公司现有业务所需资源。
 
