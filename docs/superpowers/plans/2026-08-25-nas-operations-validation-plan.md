@@ -346,11 +346,11 @@ Commit workflows and version wiring with Lore trailers, push the reviewed branch
 - Consumes: full repository, CI artifact/image digest, Browser verification, and all plan tests.
 - Produces: release-candidate verdict before any NAS write.
 
-- [ ] **Step 1: Run every local verifier from a clean checkout state**
+- [x] **Step 1: Run every local verifier from a clean checkout state**
 
 Run Python tests, Ruff, mypy, all Node tests, static Pages test, Compose security, deploy-script safety, workflow policy, and browser E2E against a temporary database/report root. Record exact counts and exit codes.
 
-- [ ] **Step 2: Inspect the built image artifact**
+- [x] **Step 2: Inspect the built image artifact**
 
 Use the CI-published digest. Inspect user, entrypoint, labels, SBOM, vulnerability verdict, layers for secret filenames/content, and expected static assets. Confirm the tag and embedded version map to the same commit.
 

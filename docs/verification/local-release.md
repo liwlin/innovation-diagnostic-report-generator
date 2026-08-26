@@ -1,10 +1,10 @@
 # Local Release Candidate Verification
 
-**Verification date:** 2026-08-26 11:03:11 +08:00
+**Verification date:** 2026-08-26 12:00:16 +08:00
 **Worktree:** `F:\Git\科创诊断报告生成器优化\.worktrees\nas-centralized-app`
-**Commit:** `3a7da7354e4d87090f26c0c179c4cb73c354991b`
-**Branch:** `feature/nas-centralized-app`
-**Verdict:** local and CI checks are green for the surfaces they executed, but this is **not** a NAS proof and is **not** a published-image release proof.
+**Released candidate commit:** `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`
+**Release tag:** `v0.1.0`
+**Verdict:** Task 6 local release-candidate gates are complete for local/CI/browser/published-image evidence, but this is **not** NAS hardware proof and **not** real PostgreSQL/NAS runtime proof.
 
 ## Local Verifier Results
 
@@ -19,69 +19,114 @@
 | Compose config | `docker compose -f deploy/compose.yaml config --quiet` with dummy non-secret release environment | 0 | Parsed successfully |
 | Deploy-script safety | `pwsh -NoProfile -File tests/verify-deploy-scripts.ps1` | 0 | Guarded scripts and backup/restore contracts verified |
 | Workflow policy | `pwsh -NoProfile -File tests/verify-workflows.ps1` | 0 | Pinned, least-privilege, test-gated, release-scoped |
-| Secret scan | CI-equivalent `git grep` pattern excluding `server/uv.lock` and `vendor/*` | 0 | No committed secret material matched |
-| Workflow YAML parse | Python `yaml.safe_load` over `.github/workflows/*.yml` | 0 | Parsed successfully |
+| Secret scan | CI-equivalent `git grep -n -I -E '(AKIA[0-9A-Z]{16}|-----BEGIN (RSA|OPENSSH|EC) PRIVATE KEY-----|ghp_[A-Za-z0-9_]{36,}|sk-[A-Za-z0-9]{20,})' -- . ':!server/uv.lock' ':!vendor/*'` | 0 | No committed secret material matched |
+| Workflow YAML parse | `python -c "import yaml, pathlib; [yaml.safe_load(p.read_text(encoding='utf-8')) for p in pathlib.Path('.github/workflows').glob('*.yml')]; print('PASS: parsed workflow YAML files')"` | 0 | Parsed successfully |
 | Git whitespace check | `git diff --check` | 0 | No whitespace errors |
 
-The Python skip count is expected locally on Windows: the PostgreSQL grant integration remains skipped without a live PostgreSQL URL, and the POSIX mode-bit CLI test is skipped on Windows. CI on Linux reported a different split: 84 passed, 1 skipped.
+The Python skip count is expected locally on Windows: the PostgreSQL grant integration remains skipped without a live PostgreSQL URL, and the POSIX mode-bit CLI test is skipped on Windows. CI on Linux reported 84 passed, 1 skipped.
 
-## Browser Evidence
+## Final CI and Release Evidence
 
-Fresh runnable browser E2E was not completed in this verification pass. The repository has `tests/browser/dual-mode.spec.js`, but it is a stable flow contract for the Codex in-app Browser workflow rather than an executable Playwright suite, and no local Playwright runtime was available without adding a dependency.
+Final head CI was verified with `gh run view 32925836784 --repo liwlin/innovation-diagnostic-report-generator`:
 
-Prior browser evidence exists in `docs/verification/dual-mode-frontend.md` for local SQLite/browser flows, but it was not refreshed here. This keeps Task 6 Step 1 incomplete.
-
-## CI Evidence
-
-`gh run view 32924316381 --repo liwlin/innovation-diagnostic-report-generator` verified:
-
-- Run URL: <https://github.com/liwlin/innovation-diagnostic-report-generator/actions/runs/32924316381>
-- Head SHA: `3a7da7354e4d87090f26c0c179c4cb73c354991b`
+- Run URL: <https://github.com/liwlin/innovation-diagnostic-report-generator/actions/runs/32925836784>
+- Head SHA: `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`
 - Status/conclusion: `completed` / `success`
-- Event: `push`
-- Jobs green: Workflow policy; Python tests, Ruff, and mypy; Node tests; Secret scan; Static site, Compose, and script verifiers; Docker build without push.
+- Jobs green: Static site, Compose, and script verifiers; Workflow policy; Secret scan; Node tests; Python tests, Ruff, and mypy; Docker build without push.
 
-This CI run proves only those executed checks. The Docker job built locally with `push: false`; it did not create a GHCR digest.
+Release was verified with `gh run view 32925993328 --repo liwlin/innovation-diagnostic-report-generator`:
 
-## Static Image and Release Intent Inspection
+- Run URL: <https://github.com/liwlin/innovation-diagnostic-report-generator/actions/runs/32925993328>
+- Head SHA: `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`
+- Status/conclusion: `completed` / `success`
+- Jobs green: Re-verify release commit; Publish allowlisted Pages artifact; Publish GHCR image, SBOM, provenance, and vulnerability gate.
+- Release checks include Python/Ruff/mypy, Node, static/policy verifiers, Pages allowlist/deploy, GHCR push, CycloneDX SBOM, HIGH/CRITICAL fixed-vulnerability scan, provenance attestation, and manifest upload.
 
-`deploy/Dockerfile` statically declares:
+`git ls-remote --tags origin "refs/tags/v0.1.0^{}"` returned `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`, so tag `v0.1.0` resolves exactly to the released candidate commit.
 
-- Digest-pinned Python 3.12 slim Bookworm base image.
-- Runtime OCI labels for title, source, version, and revision.
-- Runtime user `10001:10001`.
-- Uvicorn command with one worker and no access log.
-- Static assets copied from `index.html`, the source editor HTML, `support.js`, `doc-page.js`, `assets`, `shared`, `vendor`, and `nas-web`.
-- Package-manager cache cleanup after installing CJK fonts and certificates.
+## Pages and Browser Evidence
 
-`deploy/compose.yaml` statically declares:
+Published Pages URL: <https://liwlin.github.io/innovation-diagnostic-report-generator/>
 
-- Exactly two services: `app` and `db`.
-- App loopback binding only: `127.0.0.1:18081`.
-- No PostgreSQL host port.
-- Non-root users, read-only root filesystems, dropped capabilities, `no-new-privileges`, PID/memory/CPU bounds, tmpfs, JSON log rotation, and internal network.
-- Secret files under `${SECRETS_ROOT}` and project/report bind mounts under explicit environment variables.
+`runtime-config.js` was fetched and matched the release boundary:
 
-`.github/workflows/release.yml` statically declares:
+```js
+window.__MKSEED_RUNTIME__=Object.freeze({"commitSha":"ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0","storageMode":"local","appVersion":"v0.1.0","apiBaseUrl":""});
+```
 
-- Release only on `v*` tag push or explicit dispatch against an immutable SemVer tag.
-- Re-verification before Pages publish and image publish.
-- GHCR tags for SemVer and commit SHA, not `latest`.
-- SBOM generation, Trivy HIGH/CRITICAL gate, provenance attestation, and release manifest.
+Controller browser evidence against Pages:
 
-These are static intent checks only. They are not a substitute for inspecting a published image digest.
+- In-app Browser title: `科创体验报告 · 生成器`.
+- Final editor URL and visible DOM were meaningful.
+- AI settings opened then closed.
+- Desktop `1366x768` and mobile `390x844` controls remained accessible.
+- Browser console warn/error output was empty.
+- No NAS API address was present in runtime config.
+- IAB screenshot method failed with `Unable to capture screenshot`; screenshot capture is unavailable, not passed.
 
-## Incomplete Release Gates
+Fresh browser API E2E was completed by the controller on isolated local `127.0.0.1:18903` using a temporary SQLite database/report root, then the port was released:
 
-Task 7 must remain blocked until all of the following are completed:
+- Admin login showed all records; teacher login showed all 6 shared records and no admin navigation.
+- Chinese search `张子涵` narrowed to 1 record.
+- Editor autosave changed an observation, showed `已保存`, and persisted after reload.
+- Independent teacher-B HTTP session updated version `3->4`; stale browser edit showed `记录已被其他老师修改，请重新加载`.
+- Generation completed with four links: without/with PDF/PNG.
+- Report files used exact legacy names; sizes were 73,197 / 224,736 / 81,127 / 288,101 bytes; partial count 0.
+- Soft trash via isolated API was visible in Browser recycle with restore/report/permanent-delete controls; Browser restore removed it from recycle.
+- Admin accounts and audit were visible; audit included generation/update/trash/restore.
+- Browser console warn/error output was empty; server stderr was clean.
 
-- Create a release tag from the verified commit or another reviewed commit.
-- Run the release workflow and capture the published GHCR digest.
-- Inspect the published image user, entrypoint/CMD, OCI labels, embedded version/revision, layers for secret filenames/content, expected static assets, SBOM, vulnerability verdict, and provenance.
-- Run a fresh real-browser E2E pass against a temporary database/report root, or add and run an executable browser harness without broadening release risk.
-- Run PostgreSQL grant tests against a real PostgreSQL container or the NAS database target.
-- Perform Task 7 DS220+ proof before claiming NAS runtime behavior, File Station visibility, DSM reverse proxy, Cloud Sync, backup restore, restart recovery, rollback, resource use, or company-data non-impact.
+This browser E2E proves local app behavior with temporary SQLite/report storage only. It is not PostgreSQL or NAS hardware evidence.
+
+## Published Image Evidence
+
+Registry tag `0.1.0` was verified by HTTP HEAD against GHCR manifest endpoint with a bearer pull token:
+
+- HTTP status: 200
+- `Docker-Content-Digest`: `sha256:996d991c215fc30f62ea782315b76d093cda0d8da98fd058fea2a60e6c4ca718`
+
+The local GitHub package REST query returned 403 because the local `gh` token lacks `read:packages`; that REST limitation does not block the registry digest proof above.
+
+Published image evidence:
+
+- GHCR index digest: `sha256:996d991c215fc30f62ea782315b76d093cda0d8da98fd058fea2a60e6c4ca718`
+- Linux/amd64 manifest digest: `sha256:256eea792348d1a576b628b2e48e9fbfcd844ea2745df91003becec420948cc3`
+- Config digest: `sha256:2cef241b6cc638cb7dd1703a2444904c8690c7e8c931a0a9dd4dcb4bb3c45dba`
+- Layer count: 14
+- User: `10001:10001`
+- CMD: Uvicorn running `makerseed_app.main:app`, one worker, no access log.
+- Env/labels bind version `v0.1.0` and commit `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`.
+
+Release evidence artifacts:
+
+- `release-manifest.json` SHA-256: `b6fa5342a6d78f2eae0d8cf7fff03dea86c0a89a9a82495a886352ad8207fa3`
+- `sbom.cdx.json` SHA-256: `fc020f7306905e28363418ffd68b9318bfd41aed9611e16c4adedbba1caae1d6`
+- SBOM format: CycloneDX 1.6
+- SBOM components: 153
+- SBOM subject: exact image digest `sha256:996d991c215fc30f62ea782315b76d093cda0d8da98fd058fea2a60e6c4ca718`
+
+`gh attestation verify oci://ghcr.io/liwlin/innovation-diagnostic-report-generator@sha256:996d991c215fc30f62ea782315b76d093cda0d8da98fd058fea2a60e6c4ca718 --repo liwlin/innovation-diagnostic-report-generator --signer-workflow liwlin/innovation-diagnostic-report-generator/.github/workflows/release.yml --source-digest ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0 --source-ref refs/tags/v0.1.0 --deny-self-hosted-runners --format json` returned exit 0. The SLSA provenance v1 subject is the exact index digest, and the source ref/digest match `refs/tags/v0.1.0` and `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`.
+
+OCI layer inspection was performed in ignored scratch and did not commit layer contents:
+
+- Downloaded all 14 layers, about 92 MiB.
+- Every layer SHA matched.
+- Inspected 10,420 paths.
+- Path traversal findings: 0.
+- Expected `index.html`, logos, shared runtime, vendor React, and Alembic files present.
+- Secret pattern matches: 0.
+- Project tests, docs, deploy files, `.git`, `.env`, and secrets absent.
+- Only third-party `greenlet` package tests were present under `.venv`; this is a minor image-slimming observation, not project test leakage and not a secret finding.
+
+## Remaining NAS Gates
+
+Task 7 still requires DS220+ proof before any NAS claim:
+
+- Run PostgreSQL grant tests against the real `db` target.
+- Run deployment preflight and prove write isolation on the NAS.
+- Start and inspect the two actual NAS containers.
+- Verify DSM HTTPS reverse proxy, File Station ACLs, Cloud Sync isolation, backup/restore, restart recovery, rollback, resource use, and company-data non-impact.
 
 ## Boundary Statement
 
-This evidence does not prove NAS deployment, NAS security posture, DSM HTTPS behavior, File Station ACLs, Cloud Sync isolation, real PostgreSQL grants, published image contents, SBOM/vulnerability output, or hardware runtime. It is a local/CI release-candidate readiness record with explicit gates before any NAS write.
+Task 6 is complete for local release-candidate verification, published image evidence, Pages/browser evidence, and release provenance. This evidence still does not prove NAS deployment, NAS security posture, DSM HTTPS behavior, File Station ACLs, Cloud Sync isolation, real PostgreSQL grants, backup restore on DS220+, rollback on DS220+, or hardware runtime behavior.

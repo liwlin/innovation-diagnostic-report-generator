@@ -1,23 +1,46 @@
-# CI Run Summary
+# CI and Release Run Summary
 
-Command: `gh run view 32924316381 --repo liwlin/innovation-diagnostic-report-generator --json headSha,conclusion,status,url,jobs,event,createdAt,updatedAt,name`
+Final head CI:
 
-- Run: <https://github.com/liwlin/innovation-diagnostic-report-generator/actions/runs/32924316381>
+- Command: `gh run view 32925836784 --repo liwlin/innovation-diagnostic-report-generator --json headSha,conclusion,status,url,jobs,event,createdAt,updatedAt,name`
+- Run: <https://github.com/liwlin/innovation-diagnostic-report-generator/actions/runs/32925836784>
 - Workflow: CI
 - Event: push
-- Head SHA: `3a7da7354e4d87090f26c0c179c4cb73c354991b`
+- Head SHA: `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`
 - Status: completed
 - Conclusion: success
-- Created: 2026-08-26T02:52:12Z
-- Updated: 2026-08-26T02:53:39Z
+- Created: 2026-08-26T03:16:34Z
+- Updated: 2026-08-26T03:17:58Z
 
-Green jobs:
+Green CI jobs:
 
-- Python tests, Ruff, and mypy
-- Workflow policy
-- Node tests
-- Secret scan
 - Static site, Compose, and script verifiers
+- Workflow policy
+- Secret scan
+- Node tests
+- Python tests, Ruff, and mypy
 - Docker build without push
 
-Boundary: the Docker job used `push: false`; it did not publish a GHCR image digest.
+Release run:
+
+- Command: `gh run view 32925993328 --repo liwlin/innovation-diagnostic-report-generator --json headSha,conclusion,status,url,jobs,event,createdAt,updatedAt,name`
+- Run: <https://github.com/liwlin/innovation-diagnostic-report-generator/actions/runs/32925993328>
+- Workflow: Release
+- Event: push
+- Head SHA: `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`
+- Status: completed
+- Conclusion: success
+- Created: 2026-08-26T03:19:06Z
+- Updated: 2026-08-26T03:22:08Z
+
+Green release jobs:
+
+- Re-verify release commit
+- Publish allowlisted Pages artifact
+- Publish GHCR image, SBOM, provenance, and vulnerability gate
+
+Tag proof:
+
+- `git ls-remote --tags origin "refs/tags/v0.1.0^{}"` returned `ddc9164bfd8320d9a56bfa4f2124c5253a64d6c0`.
+
+Boundary: final CI still includes a Docker build without push, while the separate release run provides the published GHCR/SBOM/provenance evidence.
