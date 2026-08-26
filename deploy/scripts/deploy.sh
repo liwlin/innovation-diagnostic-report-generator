@@ -43,7 +43,11 @@ previous_image=''
 previous_version=''
 previous_db_image=''
 previous_db_config_hash=''
-if [ -f "$previous_state" ] && [ ! -L "$previous_state" ]; then
+if [ -e "$previous_state" ]; then
+  if [ ! -f "$previous_state" ] || [ -L "$previous_state" ]; then
+    echo "ABORT: current.env exists but is not a regular non-symlink file; capture an audited baseline before deployment" >&2
+    exit 81
+  fi
   previous_exists=1
   previous_release=$(sed -n 's/^RELEASE_ROOT=//p' "$previous_state")
   previous_image=$(sed -n 's/^APP_IMAGE=//p' "$previous_state")
@@ -51,6 +55,26 @@ if [ -f "$previous_state" ] && [ ! -L "$previous_state" ]; then
   previous_db_image=$(sed -n 's/^DB_IMAGE=//p' "$previous_state")
   previous_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$previous_state")
 fi
+
+data_postgres_has_entries() {
+  data_dir="$PROJECT_ROOT/data/postgres"
+  [ -d "$data_dir" ] || return 1
+  for child in "$data_dir"/* "$data_dir"/.[!.]* "$data_dir"/..?*; do
+    [ -e "$child" ] && return 0
+  done
+  return 1
+}
+
+detect_existing_db_footprint() {
+  existing_db_container=$(compose ps -a -q db 2>/dev/null || true)
+  if [ -n "$existing_db_container" ]; then
+    return 0
+  fi
+  if data_postgres_has_entries; then
+    return 0
+  fi
+  return 1
+}
 
 db_config_hash() {
   container_id=$1
@@ -94,6 +118,10 @@ if [ "$previous_exists" -eq 1 ]; then
   "$SCRIPT_DIR/restore-verify.sh" --backup "$backup_file" >/dev/null
 fi
 if [ "$previous_exists" -eq 0 ]; then
+  if detect_existing_db_footprint; then
+    echo "ABORT: refusing first install over existing database evidence; capture an audited baseline before deployment" >&2
+    exit 81
+  fi
   compose up -d db
   db_container=$(compose ps -q db)
   attempt=0

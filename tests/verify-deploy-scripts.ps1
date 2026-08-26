@@ -68,7 +68,8 @@ Assert-Condition ($preflight -match 'PREFLIGHT_NONCE') 'Preflight must require a
 Assert-Condition ($preflight -match 'MIN_COMPOSE_VERSION') 'Preflight must enforce a minimum Docker Compose version.'
 Assert-Condition ($preflight -match 'stat -c %a') 'Preflight must validate secret file modes.'
 Assert-Condition ($preflight -match 'REPORT_ROOT') 'Preflight must validate the declared report mount root.'
-Assert-Condition ($preflight -match 'readlink -f "\$REPORT_ROOT"') 'Preflight must resolve declared mounts before approval.'
+Assert-Condition ($preflight -match 'canonical_bind_source "\$REPORT_ROOT"') 'Preflight must resolve the report mount through the missing-parent-safe canonicalizer.'
+Assert-Condition ($preflight -notmatch '(?m)^\s*resolved_report=\$\(readlink -f "\$REPORT_ROOT"\)') 'Preflight must not raw readlink REPORT_ROOT before the safe missing-parent canonicalizer.'
 Assert-Condition ($preflight -match 'REPORT_ROOT_PHASE') 'Preflight must require an explicit isolated/promoted report-root phase.'
 Assert-Condition ($preflight -match 'reports-staging') 'Isolated hardware preflight must approve only the project-owned reports-staging root.'
 Assert-Condition ($preflight -match '/volume1/科创诊断报告') 'Promoted preflight must approve only the final encrypted File Station share.'
@@ -116,6 +117,11 @@ Assert-Condition ($deploy -match 'APP_IMAGE=%s') 'Deploy state must persist the 
 Assert-Condition ($deploy -match 'MIGRATION_COMPATIBILITY') 'Deploy must require an explicit migration compatibility contract.'
 Assert-Condition ($deploy -match 'SCHEMA_COMPATIBLE=%s') 'Deploy state must persist schema compatibility for rollback.'
 Assert-Condition ($deploy -match 'bootstrap.*password') 'Deploy must remove temporary bootstrap password material after successful smoke.'
+Assert-Condition ($deploy -match 'current\.env exists but is not a regular non-symlink file') 'Deploy must fail closed when current.env exists but is unsafe.'
+Assert-Condition ($deploy -match 'detect_existing_db_footprint') 'Deploy must check for existing DB evidence before treating a run as first install.'
+Assert-Condition ($deploy -match 'compose ps -a -q db') 'Deploy must inspect the exact project db container before first-install DB creation.'
+Assert-Condition ($deploy -match 'data_postgres_has_entries') 'Deploy must inspect persisted postgres data before first-install DB creation.'
+Assert-Condition ($deploy -match 'refusing first install over existing database evidence') 'Deploy must require an audited baseline instead of reconciling existing DB evidence.'
 
 $rollback = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/rollback.sh') -Raw -Encoding UTF8
 Assert-Condition ($rollback -match 'deployment-state') 'Rollback does not require recorded deployment state.'

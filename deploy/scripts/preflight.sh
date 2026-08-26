@@ -193,7 +193,6 @@ done
 resolved_data=$(canonical_bind_source "$PROJECT_ROOT/data/postgres" "$PROJECT_ROOT/data/postgres" exact)
 resolved_backups=$(canonical_bind_source "$PROJECT_ROOT/backups" "$PROJECT_ROOT/backups" exact)
 resolved_init=$(canonical_bind_source "$RELEASE_ROOT/postgres-init/10-create-runtime-role.sh" "$RELEASE_ROOT/postgres-init/10-create-runtime-role.sh" exact)
-resolved_report=$(readlink -f "$REPORT_ROOT")
 resolved_report=$(canonical_bind_source "$REPORT_ROOT" "$APPROVED_REPORT_ROOT" exact)
 case "$resolved_report" in
   "$APPROVED_REPORT_ROOT") ;;

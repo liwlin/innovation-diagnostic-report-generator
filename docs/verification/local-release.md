@@ -25,6 +25,12 @@
 
 The Python skip count is expected locally on Windows: the PostgreSQL grant integration remains skipped without a live PostgreSQL URL, and the POSIX mode-bit CLI test is skipped on Windows. CI on Linux reported 84 passed, 1 skipped.
 
+Dummy non-secret Compose env used for the local Compose config parse:
+
+```powershell
+$env:PROJECT_ROOT = (Join-Path $PWD '.tmp/compose-dummy/project'); $env:REPORT_ROOT = (Join-Path $PWD '.tmp/compose-dummy/reports'); $env:SECRETS_ROOT = (Join-Path $env:PROJECT_ROOT 'secrets'); $env:RELEASE_ROOT = (Join-Path $PWD 'deploy'); $env:APP_IMAGE = 'ghcr.io/liwlin/innovation-diagnostic-report-generator@sha256:0000000000000000000000000000000000000000000000000000000000000000'; $env:APP_VERSION = 'v0.1.0'; docker compose -f deploy/compose.yaml config --quiet
+```
+
 ## Final CI and Release Evidence
 
 Final head CI was verified with `gh run view 32925836784 --repo liwlin/innovation-diagnostic-report-generator`:
