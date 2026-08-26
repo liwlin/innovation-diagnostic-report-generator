@@ -328,6 +328,16 @@ printf 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  -leadi
 if run_preflight_bootstrap >/dev/null 2>&1; then fail "manifest leading-dash path was accepted"; fi
 
 reset_stage
+printf 'dash component\n' >"$BOOTSTRAP_STAGE/release/deploy/-name"
+(
+  cd "$BOOTSTRAP_STAGE/release"
+  find deploy -type f | LC_ALL=C sort | while IFS= read -r file; do
+    sha256sum "$file"
+  done > "$BOOTSTRAP_STAGE/release-tree.sha256"
+)
+if run_preflight_bootstrap >/dev/null 2>&1; then fail "manifest dash path component was accepted"; fi
+
+reset_stage
 printf 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  deploy/control\001path\n' >"$BOOTSTRAP_STAGE/release-tree.sha256"
 if run_preflight_bootstrap >/dev/null 2>&1; then fail "manifest control-character path was accepted"; fi
 

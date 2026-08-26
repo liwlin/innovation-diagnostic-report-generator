@@ -143,7 +143,7 @@ verify_release_tree() {
     index($0, "  ") == 65 {
       hash = substr($0, 1, 64)
       rel = substr($0, 67)
-      if (hash !~ /^[0-9a-f]{64}$/ || rel == "" || rel ~ /^\// || rel ~ /^-/ || rel ~ /\\/ || rel ~ /(^|\/)\.\.(\/|$)/ || rel ~ /[[:cntrl:]]/) exit 1
+      if (hash !~ /^[0-9a-f]{64}$/ || rel == "" || rel ~ /^\// || rel ~ /(^|\/)-/ || rel ~ /\\/ || rel ~ /(^|\/)\.\.(\/|$)/ || rel ~ /[[:cntrl:]]/) exit 1
       if (rel !~ /^[ -~]+$/) exit 1
       if (last != "" && rel <= last) exit 1
       if (seen[rel]++) exit 1
