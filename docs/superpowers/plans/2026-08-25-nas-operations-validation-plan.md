@@ -91,7 +91,7 @@ If `/volume1/docker` is not the verified Docker parent on the device, stop befor
 - Consumes: locked Python app, static assets, secret files, dedicated host directories, and pinned image digests.
 - Produces: one non-root app image and two long-running Compose services named `app` and `db` inside project `makerseed-diagnostic`.
 
-- [ ] **Step 1: Write a failing Compose security verifier**
+- [x] **Step 1: Write a failing Compose security verifier**
 
 The PowerShell verifier runs `docker compose -f deploy/compose.yaml config --format json` without requiring a daemon and asserts:
 
@@ -106,17 +106,17 @@ $services.app.security_opt | Should-Contain 'no-new-privileges:true'
 
 It must fail if any service uses `privileged`, `network_mode: host`, Docker Socket, device mounts, `latest`, unbounded writable root, `/volume1` broad mount, or an unapproved host path.
 
-- [ ] **Step 2: Run the verifier and confirm missing Compose**
+- [x] **Step 2: Run the verifier and confirm missing Compose**
 
 Run: `pwsh -NoProfile -File tests/verify-compose-security.ps1`
 
 Expected: fail because `deploy/compose.yaml` is absent.
 
-- [ ] **Step 3: Create a digest-pinned multi-stage app image**
+- [x] **Step 3: Create a digest-pinned multi-stage app image**
 
 Use a digest-pinned Python 3.12 slim Debian base. The build stage installs the locked wheel set; the runtime stage installs only Noto CJK font and required shared libraries, copies the virtual environment and static assets, creates UID/GID `10001`, and sets `USER 10001:10001`. Entrypoint runs Uvicorn with one worker and no reload. Do not place a shell package manager cache, Git metadata, tests, secrets, uploads, `.omx`, or local preview files in the runtime image.
 
-- [ ] **Step 4: Create the two-service Compose file**
+- [x] **Step 4: Create the two-service Compose file**
 
 `app` uses `user: "10001:10001"`, `read_only: true`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `pids_limit: 128`, `mem_limit: 1536m`, `cpus: 1.5`, bounded `/tmp` tmpfs, loopback port `18081`, project-only report mount, explicit secrets, JSON log rotation, and healthcheck.
 
@@ -124,11 +124,11 @@ Use a digest-pinned Python 3.12 slim Debian base. The build stage installs the l
 
 The shared Docker network is `internal: true`. The app depends on `db` with `condition: service_healthy` supported by the verified Synology Compose version.
 
-- [ ] **Step 5: Create a safe PostgreSQL role initializer**
+- [x] **Step 5: Create a safe PostgreSQL role initializer**
 
 The initializer reads owner/runtime passwords from `/run/secrets`, passes values to `psql` variables rather than interpolating SQL text, creates the runtime role without CREATEDB/CREATEROLE/SUPERUSER/BYPASSRLS, and grants only required table/sequence privileges. A later migration grant explicitly omits UPDATE/DELETE on `audit_events`.
 
-- [ ] **Step 6: Run config and security checks**
+- [x] **Step 6: Run config and security checks**
 
 Run:
 
@@ -140,7 +140,7 @@ git check-ignore .env secrets/session_secret secrets/postgres_owner_password
 
 Expected: all pass and every secret path is ignored.
 
-- [ ] **Step 7: Commit container boundaries**
+- [x] **Step 7: Commit container boundaries**
 
 Record two-container count, loopback/no-DB-port, mounts, non-root/read-only/capability/resource controls, digest policy, and config verification.
 

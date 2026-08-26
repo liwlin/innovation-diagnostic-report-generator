@@ -8,3 +8,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 server/.alembic-development.sqlite3
+.env
+deploy/.env
+deploy/secrets/
+secrets/

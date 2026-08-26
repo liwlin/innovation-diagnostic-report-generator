@@ -1,0 +1,128 @@
+services:
+  db:
+    image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+    user: "999:999"
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 2048m
+    cpus: 1.0
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_DB: makerseed
+      POSTGRES_USER: makerseed_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_owner_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+    secrets:
+      - postgres_owner_password
+      - postgres_runtime_password
+    volumes:
+      - type: bind
+        source: ${PROJECT_ROOT:?PROJECT_ROOT is required}/data/postgres
+        target: /var/lib/postgresql/data
+      - type: bind
+        source: ${PROJECT_ROOT:?PROJECT_ROOT is required}/backups
+        target: /backups
+      - type: bind
+        source: ${RELEASE_ROOT:-.}/postgres-init/10-create-runtime-role.sh
+        target: /docker-entrypoint-initdb.d/10-create-runtime-role.sh
+        read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=999,gid=999,mode=1770
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,uid=999,gid=999,mode=0770
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U makerseed_owner -d makerseed"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - default
+
+  app:
+    image: ${APP_IMAGE:?APP_IMAGE with immutable digest is required}
+    user: "10001:10001"
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1536m
+    cpus: 1.5
+    stop_grace_period: 30s
+    init: true
+    environment:
+      MKSEED_ENVIRONMENT: production
+      MKSEED_APP_VERSION: ${APP_VERSION:-dev}
+      MKSEED_SECRETS_DIR: /run/secrets
+      MKSEED_SECURE_COOKIES: "true"
+      MKSEED_GENERATION_WORKER_ENABLED: "true"
+      MKSEED_GENERATION_POLL_SECONDS: "2"
+      MKSEED_REPORT_ROOT: /data/reports
+      MKSEED_REPORT_FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+      MKSEED_LOGO_MARK_PATH: /opt/app/static/assets/logo-mark.png
+      MKSEED_LOGO_LOCKUP_PATH: /opt/app/static/assets/logo-lockup.png
+      MKSEED_STATIC_ROOT: /opt/app/static
+      MKSEED_NAS_WEB_ROOT: /opt/app/static/nas-web
+    secrets:
+      - source: app_database_url
+        target: database_url
+      - source: app_session_secret
+        target: session_secret
+      - source: app_bootstrap_secret
+        target: bootstrap_secret
+    volumes:
+      - type: bind
+        source: ${REPORT_ROOT:?REPORT_ROOT is required}
+        target: /data/reports
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m,uid=10001,gid=10001,mode=0700
+    ports:
+      - target: 8080
+        published: "18081"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - default
+
+networks:
+  default:
+    internal: true
+
+secrets:
+  postgres_owner_password:
+    file: ${SECRETS_ROOT:?SECRETS_ROOT is required}/postgres_owner_password
+  postgres_runtime_password:
+    file: ${SECRETS_ROOT:?SECRETS_ROOT is required}/postgres_runtime_password
+  app_database_url:
+    file: ${SECRETS_ROOT:?SECRETS_ROOT is required}/database_url
+  app_session_secret:
+    file: ${SECRETS_ROOT:?SECRETS_ROOT is required}/session_secret
+  app_bootstrap_secret:
+    file: ${SECRETS_ROOT:?SECRETS_ROOT is required}/bootstrap_secret
