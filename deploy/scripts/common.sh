@@ -192,6 +192,7 @@ verify_release_tree() {
     deploy/postgres-init/10-create-runtime-role.sh \
     deploy/scripts/common.sh \
     deploy/scripts/preflight.sh \
+    deploy/scripts/prepare-manual-rollback-smoke.sh \
     deploy/scripts/install-layout.sh \
     deploy/scripts/migrate.sh \
     deploy/scripts/backup.sh \

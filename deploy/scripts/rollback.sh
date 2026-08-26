@@ -15,6 +15,7 @@ fi
 state_file=$2
 state_dir=$(readlink -f "$PROJECT_ROOT/deployment-state")
 current_state="$state_dir/current.env"
+pending_state="$state_dir/pending.env"
 project_env="$PROJECT_ROOT/.env"
 
 require_regular_state_file() {
@@ -85,6 +86,34 @@ require_safe_version() {
   esac
 }
 
+require_bounded_username() {
+  username=$1
+  if [ "${#username}" -lt 1 ] || [ "${#username}" -gt 64 ]; then
+    echo "ABORT: smoke admin username length is unsafe" >&2
+    exit 93
+  fi
+  case "$username" in
+    *[!A-Za-z0-9._@+-]*)
+      echo "ABORT: smoke admin username contains unsafe characters" >&2
+      exit 93
+      ;;
+  esac
+}
+
+require_manual_smoke_file() {
+  manual_path=$1
+  label=$2
+  if [ ! -f "$manual_path" ] || [ -L "$manual_path" ]; then
+    echo "ABORT: $label file is missing or unsafe" >&2
+    exit 91
+  fi
+  mode=$(stat -c %a "$manual_path")
+  if [ "$mode" != "600" ]; then
+    echo "ABORT: $label file must be mode 600" >&2
+    exit 91
+  fi
+}
+
 release_id_from_root() {
   basename "$(dirname "$1")"
 }
@@ -110,6 +139,25 @@ validate_release_tuple() {
   fi
 }
 
+require_active_current_symlink() {
+  expected_target=$1
+  link_path="$PROJECT_ROOT/current"
+  if [ ! -L "$link_path" ]; then
+    echo "ABORT: current must be a symlink to the active release" >&2
+    exit 93
+  fi
+  link_target=$(readlink "$link_path")
+  if [ "$link_target" != "$expected_target" ]; then
+    echo "ABORT: current symlink and current deployment state disagree" >&2
+    exit 93
+  fi
+  if [ ! -d "$link_target" ] || [ -L "$link_target" ]; then
+    echo "ABORT: current symlink target is missing or unsafe" >&2
+    exit 93
+  fi
+  printf '%s\n' "$link_target"
+}
+
 require_regular_state_file "$state_file" "deployment-state file"
 resolved_state=$(readlink -f "$state_file")
 case "$resolved_state" in
@@ -125,6 +173,30 @@ fi
 manual_state=0
 if [ "$resolved_state" = "$current_state" ]; then
   manual_state=1
+elif [ "$resolved_state" = "$pending_state" ]; then
+  manual_state=0
+else
+  echo "ABORT: unsupported deployment-state file; use exact current.env for manual rollback or pending.env for deploy rollback" >&2
+  exit 91
+fi
+
+manual_admin_password_file=''
+manual_smoke_test_password_file=''
+if [ "$manual_state" -eq 1 ]; then
+  : "${SECRETS_ROOT:?SECRETS_ROOT is required for manual rollback}"
+  if [ "$SECRETS_ROOT" != "$PROJECT_ROOT/secrets" ]; then
+    echo "ABORT: manual rollback secrets root must be the project secrets directory" >&2
+    exit 91
+  fi
+  : "${SMOKE_ADMIN_USERNAME:?SMOKE_ADMIN_USERNAME is required for manual rollback}"
+  require_bounded_username "$SMOKE_ADMIN_USERNAME"
+  manual_admin_password_file="$SECRETS_ROOT/manual_rollback_admin_password"
+  manual_smoke_test_password_file="$SECRETS_ROOT/manual_rollback_smoke_test_password"
+  require_manual_smoke_file "$SECRETS_ROOT/manual_rollback_admin_password" "manual admin credential"
+  require_manual_smoke_file "$SECRETS_ROOT/manual_rollback_smoke_test_password" "manual smoke credential"
+  SMOKE_ADMIN_PASSWORD_FILE=$manual_admin_password_file
+  SMOKE_TEST_PASSWORD_FILE=$manual_smoke_test_password_file
+  export SMOKE_ADMIN_USERNAME SMOKE_ADMIN_PASSWORD_FILE SMOKE_TEST_PASSWORD_FILE
   require_regular_state_file "$project_env" ".env"
   require_regular_state_file "$current_state" "current.env"
   require_regular_state_file "$current_state.sha256" "current.env.sha256"
@@ -147,10 +219,12 @@ manual_backup_ready=0
 manual_env_backup="$PROJECT_ROOT/.env.before-manual-rollback"
 manual_state_backup="$state_dir/current.env.before-manual-rollback"
 manual_hash_backup="$state_dir/current.env.sha256.before-manual-rollback"
+manual_current_backup="$state_dir/current.before-manual-rollback"
 active_release=''
 active_image=''
 active_version=''
 active_release_id=''
+active_current_target=''
 
 restore_manual_rollback_files() {
   if [ -n "$manual_stage_dir" ] && [ -d "$manual_stage_dir" ]; then
@@ -162,8 +236,13 @@ restore_manual_rollback_files() {
       mv "$manual_env_backup" "$project_env" || true
       mv "$manual_state_backup" "$current_state" || true
       mv "$manual_hash_backup" "$current_state.sha256" || true
+      if [ -f "$manual_current_backup" ] && [ ! -L "$manual_current_backup" ]; then
+        restored_current=$(sed -n '1p' "$manual_current_backup")
+        rm -f "$PROJECT_ROOT/current" || true
+        ln -sfn "$restored_current" "$PROJECT_ROOT/current" || true
+      fi
     fi
-    rm -f "$manual_env_backup" "$manual_state_backup" "$manual_hash_backup"
+    rm -f "$manual_env_backup" "$manual_state_backup" "$manual_hash_backup" "$manual_current_backup"
   fi
 }
 
@@ -199,7 +278,8 @@ if [ "$manual_state" -eq 1 ]; then
     exit 93
   fi
   validate_release_tuple "$active_release" "$active_image" "$active_version" "$active_release_id"
-  for manual_reserved in "$manual_env_backup" "$manual_state_backup" "$manual_hash_backup"; do
+  active_current_target=$(require_active_current_symlink "$active_release")
+  for manual_reserved in "$manual_env_backup" "$manual_state_backup" "$manual_hash_backup" "$manual_current_backup"; do
     if [ -e "$manual_reserved" ] || [ -L "$manual_reserved" ]; then
       echo "ABORT: reserved manual rollback backup already exists: $manual_reserved" >&2
       exit 93
@@ -287,19 +367,28 @@ if [ "$manual_state" -eq 1 ]; then
   cp -p "$project_env" "$manual_env_backup"
   cp -p "$current_state" "$manual_state_backup"
   cp -p "$current_state.sha256" "$manual_hash_backup"
+  printf '%s\n' "$active_current_target" >"$manual_current_backup"
+  chmod 600 "$manual_current_backup"
   manual_backup_ready=1
   manual_commit_started=1
   mv "$manual_stage_dir/.env" "$project_env"
   mv "$manual_stage_dir/current.env" "$current_state"
   mv "$manual_stage_dir/current.env.sha256" "$current_state.sha256"
   (cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)
+  ln -sfn "$previous_release" "$PROJECT_ROOT/current"
+  if [ "$(readlink "$PROJECT_ROOT/current")" != "$previous_release" ]; then
+    echo "ABORT: current symlink did not publish rolled-back release" >&2
+    exit 93
+  fi
   manual_commit_complete=1
-  rm -f "$manual_env_backup" "$manual_state_backup" "$manual_hash_backup"
+  rm -f "$manual_env_backup" "$manual_state_backup" "$manual_hash_backup" "$manual_current_backup"
   rmdir "$manual_stage_dir"
   manual_stage_dir=''
 fi
-ln -sfn "$previous_release" "$PROJECT_ROOT/current"
-if [ "$manual_state" -eq 1 ]; then
+if [ "$manual_state" -eq 0 ]; then
+  ln -sfn "$previous_release" "$PROJECT_ROOT/current"
+else
+  rm -f "$manual_admin_password_file" "$manual_smoke_test_password_file"
   trap - EXIT HUP INT TERM
 fi
 echo "ROLLBACK_OK: $previous_version"

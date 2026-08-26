@@ -7,6 +7,7 @@ $requiredScripts = @(
     'deploy/scripts/restore-verify.sh',
     'deploy/scripts/preflight.sh',
     'deploy/scripts/install-layout.sh',
+    'deploy/scripts/prepare-manual-rollback-smoke.sh',
     'deploy/scripts/smoke.sh',
     'deploy/scripts/deploy.sh',
     'deploy/scripts/rollback.sh',
@@ -213,6 +214,7 @@ $rollbackSmokePosition = $rollback.IndexOf('"$SCRIPT_DIR/smoke.sh"')
 $manualStagePosition = $rollback.IndexOf('manual_stage_dir=$(mktemp -d "$state_dir/.manual-rollback-stage.XXXXXX")')
 $manualPublishedHashCheckPosition = $rollback.LastIndexOf('(cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)')
 $rollbackSymlinkPosition = $rollback.IndexOf('ln -sfn "$previous_release" "$PROJECT_ROOT/current"')
+$manualCommitCompletePosition = $rollback.IndexOf('manual_commit_complete=1')
 Assert-Condition ($rollback -match 'deployment-state') 'Rollback does not require recorded deployment state.'
 Assert-Condition ($rollback -match 'sha256sum') 'Rollback does not verify its state or backup proof.'
 Assert-Condition ($rollback -match 'CONFIRM_INCOMPATIBLE_SCHEMA_RESTORE') 'Rollback must require a separate confirmation for incompatible-schema database restore.'
@@ -220,18 +222,34 @@ Assert-Condition ($rollback -match 'restore-verify\.sh') 'Rollback must verify t
 Assert-Condition ($rollback -match 'pg_restore') 'Rollback must implement the confirmed incompatible-schema restore path.'
 Assert-Condition ($rollback -match 'compose stop app') 'Rollback must stop app before an incompatible-schema database restore.'
 Assert-Condition ($rollback -match 'if \[ "\$resolved_state" = "\$current_state" \]') 'Rollback must distinguish exact current.env manual rollback from pending automatic rollback.'
+Assert-Condition ($rollback -match 'elif \[ "\$resolved_state" = "\$pending_state" \]') 'Rollback must accept only exact pending.env for automatic rollback.'
+Assert-Condition ($rollback -match 'unsupported deployment-state file') 'Rollback must reject non-current non-pending state files before mutation.'
 Assert-Condition ($rollback -match 'require_regular_state_file "\$project_env" "\.env"') 'Manual rollback must require .env to be a regular non-symlink file before Docker mutation.'
 Assert-Condition ($rollback -match 'require_canonical_current_env_sha256 "\$current_state\.sha256"') 'Manual rollback must require canonical current.env.sha256 syntax.'
+Assert-Condition ($rollback -match 'require_manual_smoke_file "\$SECRETS_ROOT/manual_rollback_admin_password"') 'Manual rollback must consume the exact manual admin password file under secrets.'
+Assert-Condition ($rollback -match 'require_manual_smoke_file "\$SECRETS_ROOT/manual_rollback_smoke_test_password"') 'Manual rollback must consume the exact manual smoke-test password file under secrets.'
+Assert-Condition ($rollback -match 'require_bounded_username "\$SMOKE_ADMIN_USERNAME"') 'Manual rollback must bound the smoke admin username.'
 Assert-Condition ($rollback -match 'read_required_single_field "\$project_env" RELEASE_ID') 'Manual rollback must require active RELEASE_ID in .env.'
 Assert-Condition ($rollback -match '\.env and current deployment state disagree') 'Manual rollback must require .env and current.env active fields to agree before mutation.'
 Assert-Condition ($rollback -match 'validate_release_tuple "\$previous_release" "\$previous_image" "\$previous_version" "\$previous_release_id"') 'Rollback must validate previous release path, id, digest, and version.'
+Assert-Condition ($rollback -match 'require_active_current_symlink') 'Manual rollback must validate and record the active current symlink before Docker mutation.'
 Assert-Condition ($manualStatePosition -ge 0 -and $manualStatePosition -lt $rollbackSmokePosition) 'Rollback must classify manual rollback before smoke/app mutation.'
 Assert-Condition ($manualStagePosition -gt $rollbackSmokePosition) 'Manual rollback must stage operator state only after prior app health and smoke succeed.'
 Assert-Condition ($rollback -match 'manual_commit_started=0' -and $rollback -match 'manual_commit_complete=0') 'Manual rollback must guard multi-file operator-state commit.'
-Assert-Condition ($rollback -match '\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.sha256\.before-manual-rollback') 'Manual rollback must use exact reserved backups for .env and current state/hash.'
+Assert-Condition ($rollback -match '\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.sha256\.before-manual-rollback' -and $rollback -match 'current\.before-manual-rollback') 'Manual rollback must use exact reserved backups for .env, current state/hash, and current symlink.'
 Assert-Condition ($rollback -match 'restore_manual_active_app\(\)') 'Manual rollback failure must attempt to restore the formerly active app.'
-Assert-Condition ($manualPublishedHashCheckPosition -gt $manualStagePosition -and $manualPublishedHashCheckPosition -lt $rollbackSymlinkPosition) 'Manual rollback must verify published current.env.sha256 before switching current symlink.'
+Assert-Condition ($rollbackSymlinkPosition -gt $manualPublishedHashCheckPosition) 'Manual rollback must switch current symlink only after state/hash are published and verified.'
+Assert-Condition ($manualCommitCompletePosition -gt $rollbackSymlinkPosition) 'Manual rollback must not mark commit complete before the current symlink is verified.'
 Assert-Condition ($rollback -notmatch 'rm -f "\$resolved_state"') 'Automatic pending rollback must not remove or rewrite deployment state owned by deploy.sh.'
+
+$rollbackRunbookPath = Join-Path $projectRoot 'deploy/synology/rollback.md'
+Assert-Condition (Test-Path -LiteralPath $rollbackRunbookPath -PathType Leaf) 'Manual rollback runbook is missing.'
+$rollbackRunbook = Get-Content -LiteralPath $rollbackRunbookPath -Raw -Encoding UTF8
+Assert-Condition ($rollbackRunbook -match 'prepare-manual-rollback-smoke\.sh') 'Manual rollback runbook must prepare exact manual smoke credential files.'
+Assert-Condition ($rollbackRunbook -match 'manual_rollback_admin_password') 'Manual rollback runbook must document the exact manual admin password file.'
+Assert-Condition ($rollbackRunbook -match 'manual_rollback_smoke_test_password') 'Manual rollback runbook must document the exact manual smoke-test password file.'
+Assert-Condition ($rollbackRunbook -match 'stty -echo') 'Manual rollback runbook/helper path must support no-echo interactive credential entry.'
+Assert-Condition ($rollbackRunbook -notmatch 'SMOKE_ADMIN_PASSWORD=') 'Manual rollback runbook must not put password values in environment variables.'
 
 $smoke = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/smoke.sh') -Raw -Encoding UTF8
 foreach ($token in @('/api/health', '/api/session', '/api/auth/login', '/api/admin/users', '/api/batches', '/evaluations', 'X-CSRF-Token', '/trash', '/restore')) {
@@ -326,6 +344,7 @@ $guardCommands = @(
     'PATH=/usr/bin:/bin:$PATH PROJECT_ROOT=/tmp/not-makerseed RELEASE_ROOT=/tmp ./deploy/scripts/restore-verify.sh --backup /tmp/none.dump',
     'PATH=/usr/bin:/bin:$PATH PROJECT_ROOT=/tmp/not-makerseed RELEASE_ROOT=/tmp ./deploy/scripts/preflight.sh',
     'PATH=/usr/bin:/bin:$PATH PROJECT_ROOT=/tmp/not-makerseed RELEASE_ROOT=/tmp ./deploy/scripts/install-layout.sh',
+    'PATH=/usr/bin:/bin:$PATH PROJECT_ROOT=/tmp/not-makerseed RELEASE_ROOT=/tmp SECRETS_ROOT=/tmp ./deploy/scripts/prepare-manual-rollback-smoke.sh',
     'PATH=/usr/bin:/bin:$PATH PROJECT_ROOT=/tmp/not-makerseed RELEASE_ROOT=/tmp ./deploy/scripts/smoke.sh',
     'PATH=/usr/bin:/bin:$PATH PROJECT_ROOT=/tmp/not-makerseed RELEASE_ROOT=/tmp APP_VERSION=test ./deploy/scripts/deploy.sh',
     'PATH=/usr/bin:/bin:$PATH PROJECT_ROOT=/tmp/not-makerseed RELEASE_ROOT=/tmp ./deploy/scripts/rollback.sh'
