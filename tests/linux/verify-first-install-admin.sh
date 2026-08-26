@@ -239,7 +239,30 @@ else
 fi
 [ "$write_out" -eq 0 ] || printf '%s' "$status"
 EOF
-  chmod 755 "$fake_dir/docker" "$fake_dir/docker-compose" "$fake_dir/curl"
+  cat >"$fake_dir/sha256sum" <<'EOF'
+#!/bin/sh
+set -eu
+if [ "${FAKE_FAIL_DEPLOY_SHA256:-}" = "final-stage" ] && [ "$#" -eq 1 ] && [ "$1" = "current.env" ]; then
+  exit 96
+fi
+exec /usr/bin/sha256sum "$@"
+EOF
+  cat >"$fake_dir/mv" <<'EOF'
+#!/bin/sh
+set -eu
+printf '%s\n' "mv $*" >> "$FAKE_DOCKER_LOG"
+if [ "${FAKE_FAIL_DEPLOY_MV:-}" = "final-hash" ] && [ "$#" -eq 2 ] && [ "$1" = "current.env.sha256" ] && [ "$2" = "/volume1/docker/makerseed-diagnostic/deployment-state/current.env.sha256" ]; then
+  exit 97
+fi
+if [ "${FAKE_FAIL_DEPLOY_MV:-}" = "final-hash" ] && [ "$#" -eq 2 ] && [ "${1##*/}" = "current.env.sha256.new" ] && [ "${2##*/}" = "current.env.sha256" ]; then
+  exit 97
+fi
+if [ "${FAKE_FAIL_DEPLOY_MV:-}" = "final-hash" ] && [ "$#" -eq 2 ] && [ "${1##*/}" = "current.env.sha256" ] && [ "${2##*/}" = "current.env.sha256" ]; then
+  exit 97
+fi
+exec /usr/bin/mv "$@"
+EOF
+  chmod 755 "$fake_dir/docker" "$fake_dir/docker-compose" "$fake_dir/curl" "$fake_dir/sha256sum" "$fake_dir/mv"
   : >"$log_file"
 }
 
@@ -284,6 +307,8 @@ write_install_passwords() {
 run_deploy() {
   smoke_admin_password_file=${RUN_SMOKE_ADMIN_PASSWORD_FILE:-$PROJECT_ROOT/secrets/initial_admin_password}
   smoke_test_password_file=${RUN_SMOKE_TEST_PASSWORD_FILE:-$PROJECT_ROOT/secrets/smoke_test_password}
+  fail_deploy_sha256=${RUN_FAIL_DEPLOY_SHA256:-}
+  fail_deploy_mv=${RUN_FAIL_DEPLOY_MV:-}
   rm -f "$PROJECT_ROOT/$PROJECT_MARKER"
   set +e
   BOOTSTRAP_ADMIN_USERNAME=first-admin \
@@ -306,6 +331,8 @@ run_deploy() {
   FAKE_STATE_DIR=$FAKE_STATE_DIR \
   FAKE_EXPECTED_ADMIN_PASSWORD=$ADMIN_PASSWORD \
   FAKE_EXPECTED_TEST_PASSWORD=$SMOKE_PASSWORD \
+  FAKE_FAIL_DEPLOY_SHA256=$fail_deploy_sha256 \
+  FAKE_FAIL_DEPLOY_MV=$fail_deploy_mv \
     "$PROJECT_DIR/deploy/scripts/deploy.sh"
   deploy_status=$?
   set -e
@@ -316,6 +343,25 @@ run_deploy() {
 line_number() {
   pattern=$1
   grep -n "$pattern" "$FAKE_DOCKER_LOG" | sed -n '1s/:.*//p'
+}
+
+run_handoff() {
+  awk '
+    /^```sh$/ { block += 1; capture = (block == 2); next }
+    /^```$/ { capture = 0; next }
+    capture { print }
+  ' "$PROJECT_DIR/deploy/synology/initial-admin-handoff.md" >"$TMP_DIR/initial-admin-handoff.sh"
+  sh "$TMP_DIR/initial-admin-handoff.sh"
+}
+
+assert_current_state_unchanged() {
+  expected_state_hash=$1
+  expected_checksum_hash=$2
+  actual_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+  actual_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+  [ "$expected_state_hash" = "$actual_state_hash" ] || fail "current.env changed after failed final-state commit"
+  [ "$expected_checksum_hash" = "$actual_checksum_hash" ] || fail "current.env.sha256 changed after failed final-state commit"
+  (cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 no longer verifies after failed final-state commit"
 }
 
 [ "$(uname -s)" = "Linux" ] || fail "Linux test must run on Linux"
@@ -355,6 +401,19 @@ fi
 grep -q '^INITIAL_ADMIN_HANDOFF=pending$' "$PROJECT_ROOT/deployment-state/current.env" || fail "handoff state was not recorded as pending"
 (cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 is not valid after first install"
 grep -q '  current.env$' "$PROJECT_ROOT/deployment-state/current.env.sha256" || fail "current.env.sha256 does not record current.env after first install"
+handoff_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+handoff_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+printf 'STALE_BACKUP_SHOULD_NOT_RESTORE=1\n' >"$PROJECT_ROOT/deployment-state/current.env.before-handoff"
+printf '0000000000000000000000000000000000000000000000000000000000000000  current.env\n' >"$PROJECT_ROOT/deployment-state/current.env.sha256.before-handoff"
+rm -f "$PROJECT_ROOT/secrets/initial_admin_password"
+if run_handoff >/dev/null 2>&1; then
+  fail "handoff accepted stale backup paths"
+fi
+after_handoff_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+after_handoff_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+[ "$handoff_state_hash" = "$after_handoff_state_hash" ] || fail "stale handoff backup overwrote current.env"
+[ "$handoff_checksum_hash" = "$after_handoff_checksum_hash" ] || fail "stale handoff backup overwrote current.env.sha256"
+rm -f "$PROJECT_ROOT/deployment-state/current.env.before-handoff" "$PROJECT_ROOT/deployment-state/current.env.sha256.before-handoff"
 rm -f "$FAKE_STATE_DIR"/db-created "$FAKE_STATE_DIR"/app-started "$FAKE_STATE_DIR"/migrated "$FAKE_STATE_DIR"/bootstrapped
 
 write_install_passwords
@@ -368,6 +427,26 @@ if grep -q 'DoNotLeak' "$FAKE_DOCKER_LOG"; then
 fi
 (cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 is not valid after upgrade"
 grep -q '  current.env$' "$PROJECT_ROOT/deployment-state/current.env.sha256" || fail "current.env.sha256 does not record current.env after upgrade"
+
+write_install_passwords
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_DEPLOY_SHA256=final-stage run_deploy >/dev/null 2>&1; then
+  fail "final checksum staging failure reported deploy success"
+fi
+assert_current_state_unchanged "$before_state_hash" "$before_checksum_hash"
+rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
+
+write_install_passwords
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_DEPLOY_MV=final-hash run_deploy >/dev/null 2>&1; then
+  fail "final checksum rename failure reported deploy success"
+fi
+assert_current_state_unchanged "$before_state_hash" "$before_checksum_hash"
+rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
 
 write_install_passwords
 printf '%s\n' 'WrongAdminSecret-DoNotLeak-2026!' >"$PROJECT_ROOT/secrets/wrong_admin_password"
@@ -406,5 +485,19 @@ if grep -q 'docker-compose .* up .* app' "$FAKE_DOCKER_LOG"; then
 fi
 [ ! -e "$PROJECT_ROOT/deployment-state/pending.env" ] || fail "alternate smoke file failure wrote pending deployment state"
 [ ! -e "$PROJECT_ROOT/deployment-state/pending.env.sha256" ] || fail "alternate smoke file failure wrote pending deployment checksum"
+
+cleanup_path "$PROJECT_ROOT"
+cleanup_path "$DOCKER_PARENT"
+mkdir -p "$FAKE_STATE_DIR"
+rm -f "$FAKE_STATE_DIR"/db-created "$FAKE_STATE_DIR"/app-started "$FAKE_STATE_DIR"/migrated "$FAKE_STATE_DIR"/bootstrapped
+prepare_project_root
+write_install_passwords
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_DEPLOY_MV=final-hash run_deploy >/dev/null 2>&1; then
+  fail "first-install final checksum rename failure reported deploy success"
+fi
+[ ! -e "$PROJECT_ROOT/deployment-state/current.env" ] || fail "first-install final checksum rename failure left partial current.env"
+[ ! -e "$PROJECT_ROOT/deployment-state/current.env.sha256" ] || fail "first-install final checksum rename failure left partial current.env.sha256"
+[ ! -e "$PROJECT_ROOT/current" ] && [ ! -L "$PROJECT_ROOT/current" ] || fail "first-install final checksum rename failure published current release"
 
 echo "PASS: first-install admin bootstrap and smoke credential behavior verified."

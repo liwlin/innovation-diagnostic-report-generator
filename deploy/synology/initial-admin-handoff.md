@@ -38,13 +38,21 @@ tmp_hash=$project_root/deployment-state/current.env.sha256.handoff
 tmp_check_dir=
 state_backup=$project_root/deployment-state/current.env.before-handoff
 hash_backup=$project_root/deployment-state/current.env.sha256.before-handoff
+backup_ready=0
+
+for reserved_path in "$tmp_state" "$tmp_hash" "$state_backup" "$hash_backup"; do
+  if [ -e "$reserved_path" ] || [ -L "$reserved_path" ]; then
+    echo "ABORT: reserved handoff path already exists: $reserved_path" >&2
+    exit 1
+  fi
+done
 
 rollback_state() {
   if [ -n "$tmp_check_dir" ]; then
     rm -f "$tmp_check_dir/current.env" "$tmp_check_dir/current.env.sha256"
     rmdir "$tmp_check_dir" 2>/dev/null || true
   fi
-  if [ -f "$state_backup" ] && [ -f "$hash_backup" ]; then
+  if [ "$backup_ready" -eq 1 ] && [ -f "$state_backup" ] && [ -f "$hash_backup" ]; then
     mv "$state_backup" "$state_file"
     mv "$hash_backup" "$state_hash"
   fi
@@ -80,6 +88,7 @@ rmdir "$tmp_check_dir"
 tmp_check_dir=
 cp -p "$state_file" "$state_backup"
 cp -p "$state_hash" "$hash_backup"
+backup_ready=1
 
 [ -f "$initial_password_file" ] && [ ! -L "$initial_password_file" ]
 rm -f "$initial_password_file"
@@ -87,6 +96,7 @@ rm -f "$initial_password_file"
 mv "$tmp_state" "$state_file"
 mv "$tmp_hash" "$state_hash"
 rm -f "$state_backup" "$hash_backup"
+backup_ready=0
 trap - EXIT HUP INT TERM
 sync
 ```

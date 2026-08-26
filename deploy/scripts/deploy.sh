@@ -192,10 +192,40 @@ printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nDB_IMAGE=%s\nDB_CONTAINER
 chmod 600 "$pending_state"
 sha256sum "$pending_state" >"$pending_state.sha256"
 
+final_stage_dir=''
+commit_started=0
+commit_complete=0
+commit_backup_ready=0
+commit_state_backup="$state_dir/current.env.before-commit"
+commit_hash_backup="$state_dir/current.env.sha256.before-commit"
+
+restore_deploy_state_commit() {
+  if [ -n "$final_stage_dir" ] && [ -d "$final_stage_dir" ]; then
+    rm -f "$final_stage_dir/current.env" "$final_stage_dir/current.env.sha256"
+    rmdir "$final_stage_dir" 2>/dev/null || true
+  fi
+  if [ "$commit_complete" -eq 0 ] && [ "$commit_started" -eq 1 ]; then
+    if [ "$previous_exists" -eq 1 ]; then
+      if [ "$commit_backup_ready" -eq 1 ] && [ -f "$commit_state_backup" ] && [ -f "$commit_hash_backup" ]; then
+        mv "$commit_state_backup" "$previous_state" || true
+        mv "$commit_hash_backup" "$previous_state.sha256" || true
+      fi
+    else
+      rm -f "$previous_state" "$previous_state.sha256"
+    fi
+  fi
+  if [ "$commit_complete" -eq 0 ]; then
+    rm -f "$commit_state_backup" "$commit_hash_backup"
+  fi
+}
+
 rollback_on_error() {
   exit_code=$?
-  if [ "$exit_code" -ne 0 ] && [ "$previous_exists" -eq 1 ]; then
-    "$SCRIPT_DIR/rollback.sh" --state "$pending_state" || true
+  if [ "$exit_code" -ne 0 ]; then
+    restore_deploy_state_commit
+    if [ "$previous_exists" -eq 1 ]; then
+      "$SCRIPT_DIR/rollback.sh" --state "$pending_state" || true
+    fi
   fi
   cleanup_lock
   exit "$exit_code"
@@ -230,14 +260,32 @@ SMOKE_TEST_PASSWORD_FILE=$SMOKE_TEST_PASSWORD_FILE \
   "$SCRIPT_DIR/smoke.sh"
 
 rm -f "$SMOKE_TEST_PASSWORD_FILE"
-mv "$pending_state" "$previous_state"
+final_stage_dir=$(mktemp -d "$state_dir/.current-env-stage.XXXXXX")
+cp -p "$pending_state" "$final_stage_dir/current.env"
 (
-  cd "$state_dir"
-  sha256sum current.env > current.env.sha256.new
-  sha256sum -c current.env.sha256.new >/dev/null
-  mv current.env.sha256.new current.env.sha256
+  cd "$final_stage_dir"
+  sha256sum current.env > current.env.sha256
+  sha256sum -c current.env.sha256 >/dev/null
 )
-rm -f "$pending_state.sha256"
+for commit_backup in "$commit_state_backup" "$commit_hash_backup"; do
+  if [ -e "$commit_backup" ] || [ -L "$commit_backup" ]; then
+    echo "ABORT: reserved deployment state backup already exists: $commit_backup" >&2
+    exit 81
+  fi
+done
+if [ "$previous_exists" -eq 1 ]; then
+  cp -p "$previous_state" "$commit_state_backup"
+  cp -p "$previous_state.sha256" "$commit_hash_backup"
+  commit_backup_ready=1
+fi
+commit_started=1
+mv "$final_stage_dir/current.env" "$previous_state"
+mv "$final_stage_dir/current.env.sha256" "$previous_state.sha256"
+(cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)
+commit_complete=1
+rm -f "$pending_state" "$pending_state.sha256" "$commit_state_backup" "$commit_hash_backup"
+rmdir "$final_stage_dir"
+final_stage_dir=''
 ln -sfn "$RELEASE_ROOT" "$PROJECT_ROOT/current"
 sync
 trap - EXIT HUP INT TERM
