@@ -158,21 +158,21 @@ Record two-container count, loopback/no-DB-port, mounts, non-root/read-only/capa
 - Consumes: owner secret only in maintenance command, runtime role secret in app, Alembic migrations, and bootstrap secret.
 - Produces: migrated schema, append-only audit grants, and one-time admin creation.
 
-- [ ] **Step 1: Write failing CLI and PostgreSQL grant tests**
+- [x] **Step 1: Write failing CLI and PostgreSQL grant tests**
 
 Test that `bootstrap-admin` refuses a non-TTY password argument, accepts password from an exact secret file, creates one admin, refuses rerun without a rotate flag, and logs no password. PostgreSQL integration uses the runtime role to prove INSERT/SELECT on `audit_events` succeeds while UPDATE/DELETE raises insufficient privilege.
 
-- [ ] **Step 2: Run local CLI tests and verify missing command**
+- [x] **Step 2: Run local CLI tests and verify missing command**
 
 Run: `uv run --project server pytest server/tests/test_cli.py -q`
 
 Expected: import/command failure.
 
-- [ ] **Step 3: Implement a one-shot maintenance path**
+- [x] **Step 3: Implement a one-shot maintenance path**
 
 `migrate.sh` validates exact project root, runs the app image with owner secret and internal network, applies Alembic, applies runtime grants, and exits. No owner password is granted to the long-running app. `bootstrap-admin` reads username/display name from bounded environment variables and password from a mode-0600 secret file, then deletes or archives the bootstrap secret through an explicit admin step after success.
 
-- [ ] **Step 4: Run CLI tests and defer only real PostgreSQL evidence**
+- [x] **Step 4: Run CLI tests and defer only real PostgreSQL evidence**
 
 Run:
 
@@ -183,7 +183,7 @@ uv run --project server ruff check server/src/makerseed_app/cli.py
 
 Expected: pass. Mark PostgreSQL grant tests pending until the isolated container is available; do not substitute SQLite success.
 
-- [ ] **Step 5: Commit maintenance-role separation**
+- [x] **Step 5: Commit maintenance-role separation**
 
 Record owner/runtime separation, append-only audit intent, CLI secret handling, and the explicit remaining PostgreSQL verification.
 
