@@ -140,6 +140,9 @@ verify_existing_db_state() {
   fi
 }
 
+SMOKE_TEST_PASSWORD_FILE=${SMOKE_TEST_PASSWORD_FILE:-$SECRETS_ROOT/smoke_test_password}
+require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"
+
 backup_file=''
 if [ "$previous_exists" -eq 1 ]; then
   verify_existing_db_state
@@ -161,9 +164,7 @@ if [ "$previous_exists" -eq 0 ]; then
     *) echo "ABORT: BOOTSTRAP_ADMIN_USERNAME is invalid" >&2; exit 83 ;;
   esac
   INITIAL_ADMIN_PASSWORD_FILE=${INITIAL_ADMIN_PASSWORD_FILE:-$SECRETS_ROOT/initial_admin_password}
-  SMOKE_TEST_PASSWORD_FILE=${SMOKE_TEST_PASSWORD_FILE:-$SECRETS_ROOT/smoke_test_password}
   require_exact_secret_file INITIAL_ADMIN_PASSWORD_FILE "$INITIAL_ADMIN_PASSWORD_FILE" "$SECRETS_ROOT/initial_admin_password"
-  require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"
   SMOKE_ADMIN_USERNAME=${SMOKE_ADMIN_USERNAME:-$BOOTSTRAP_ADMIN_USERNAME}
   SMOKE_ADMIN_PASSWORD_FILE=$INITIAL_ADMIN_PASSWORD_FILE
   compose up -d db
@@ -212,10 +213,8 @@ if [ "$previous_exists" -eq 0 ]; then
 else
   : "${SMOKE_ADMIN_USERNAME:?SMOKE_ADMIN_USERNAME is required}"
   : "${SMOKE_ADMIN_PASSWORD_FILE:?SMOKE_ADMIN_PASSWORD_FILE is required}"
-  : "${SMOKE_TEST_PASSWORD_FILE:?SMOKE_TEST_PASSWORD_FILE is required}"
   require_safe_scalar SMOKE_ADMIN_USERNAME "$SMOKE_ADMIN_USERNAME" 80
   require_regular_secret_mode "$SMOKE_ADMIN_PASSWORD_FILE"
-  require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"
 fi
 compose up -d --no-deps --force-recreate app
 app_container=$(compose ps -q app)
@@ -232,7 +231,13 @@ SMOKE_TEST_PASSWORD_FILE=$SMOKE_TEST_PASSWORD_FILE \
 
 rm -f "$SMOKE_TEST_PASSWORD_FILE"
 mv "$pending_state" "$previous_state"
-mv "$pending_state.sha256" "$previous_state.sha256"
+(
+  cd "$state_dir"
+  sha256sum current.env > current.env.sha256.new
+  sha256sum -c current.env.sha256.new >/dev/null
+  mv current.env.sha256.new current.env.sha256
+)
+rm -f "$pending_state.sha256"
 ln -sfn "$RELEASE_ROOT" "$PROJECT_ROOT/current"
 sync
 trap - EXIT HUP INT TERM

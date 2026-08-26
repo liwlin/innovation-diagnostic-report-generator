@@ -131,11 +131,16 @@ $appUpPosition = $deploy.IndexOf('compose up -d --no-deps --force-recreate app')
 $dbUpPosition = $deploy.IndexOf('compose up -d db')
 $smokePosition = $deploy.IndexOf('smoke.sh')
 $bootstrapPosition = $deploy.IndexOf('bootstrap-admin')
+$smokeTestExactValidationPosition = $deploy.IndexOf('require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"')
+$pendingStateWritePosition = $deploy.IndexOf('>"$pending_state"')
 Assert-Condition ($backupPosition -ge 0 -and $backupPosition -lt $migratePosition) 'Deploy must back up before migration.'
 Assert-Condition ($verifyPosition -gt $backupPosition -and $verifyPosition -lt $migratePosition) 'Deploy must restore-verify before migration.'
 Assert-Condition ($appUpPosition -gt $migratePosition) 'Deploy must start only the app after migration.'
 Assert-Condition ($bootstrapPosition -gt $migratePosition -and $bootstrapPosition -lt $appUpPosition) 'First-install admin bootstrap must run after migration and before app startup.'
 Assert-Condition ($dbUpPosition -lt 0 -or $dbUpPosition -gt $backupPosition) 'Upgrade deployment must not start/reconcile db before backup.'
+Assert-Condition ($smokeTestExactValidationPosition -gt 0) 'Deploy must validate the exact smoke-test password file.'
+Assert-Condition ($smokeTestExactValidationPosition -lt $backupPosition) 'Deploy must validate the exact smoke-test password file before backup.'
+Assert-Condition ($smokeTestExactValidationPosition -lt $pendingStateWritePosition) 'Deploy must validate the exact smoke-test password file before pending state write.'
 Assert-Condition ($deploy -match 'previous_exists.*-eq 0') 'Deploy must separate first-install database creation from upgrade handling.'
 Assert-Condition ($deploy -match 'verify_existing_db_state') 'Deploy must verify existing DB identity, health, and persisted state before upgrade backup.'
 Assert-Condition ($deploy -match 'DB_IMAGE=') 'Deploy state must persist the DB image/digest used for drift detection.'
@@ -154,6 +159,10 @@ Assert-Condition ($deploy -match 'SMOKE_ADMIN_PASSWORD_FILE=.*INITIAL_ADMIN_PASS
 Assert-Condition ($deploy -match 'INITIAL_ADMIN_HANDOFF=pending') 'Deploy state must record pending initial admin handoff without credential material.'
 Assert-Condition ($deploy -match 'rm -f "\$SMOKE_TEST_PASSWORD_FILE"') 'Deploy must remove only the exact temporary smoke-test password file after successful smoke.'
 Assert-Condition ($deploy -notmatch 'rm -f "\$INITIAL_ADMIN_PASSWORD_FILE"') 'Deploy must not remove the preserved initial admin password automatically.'
+Assert-Condition ($deploy -match 'sha256sum current\.env > current\.env\.sha256\.new') 'Deploy must write the final checksum from current.env, not a renamed pending.env checksum.'
+Assert-Condition ($deploy -match 'sha256sum -c current\.env\.sha256\.new') 'Deploy must verify the replacement current.env checksum before publishing it.'
+Assert-Condition ($deploy -match 'rm -f "\$pending_state\.sha256"') 'Deploy must remove the exact pending checksum after successful final checksum publication.'
+Assert-Condition ($deploy -notmatch 'mv "\$pending_state\.sha256" "\$previous_state\.sha256"') 'Deploy must not rename pending.env.sha256 into current.env.sha256.'
 Assert-Condition ($deploy -match 'current\.env exists but is not a regular non-symlink file') 'Deploy must fail closed when current.env exists but is unsafe.'
 Assert-Condition ($deploy -match '\[ -e "\$previous_state" \] \|\| \[ -L "\$previous_state" \]') 'Deploy must treat a broken current.env symlink as existing unsafe state.'
 Assert-Condition ($deploy -match 'detect_existing_db_footprint') 'Deploy must check for existing DB evidence before treating a run as first install.'
@@ -195,6 +204,7 @@ Assert-Condition ($handoffRunbook -match '\[ -f "\$state_file" \] && \[ ! -L "\$
 Assert-Condition ($handoffRunbook -match 'sha256sum -c "\$state_hash"') 'Handoff cleanup must verify the current.env checksum before editing.'
 Assert-Condition ($handoffRunbook -match "grep -c '\^INITIAL_ADMIN_HANDOFF=pending\$'") 'Handoff cleanup must require exactly one pending handoff line.'
 Assert-Condition ($handoffRunbook -match 'tmp_hash=.*\.sha256\.handoff') 'Handoff cleanup must build a replacement checksum before committing state.'
+Assert-Condition ($handoffRunbook -match "printf '%s  current\.env\\n'") 'Handoff cleanup checksum must record current.env as the verified filename.'
 Assert-Condition ($handoffRunbook -match 'rm -f "\$initial_password_file"') 'Handoff cleanup must remove only the exact initial password file.'
 Assert-Condition ($handoffRunbook -match 'mv "\$tmp_state" "\$state_file"') 'Handoff cleanup must atomically replace state.'
 Assert-Condition ($handoffRunbook -match 'mv "\$tmp_hash" "\$state_hash"') 'Handoff cleanup must atomically replace checksum.'

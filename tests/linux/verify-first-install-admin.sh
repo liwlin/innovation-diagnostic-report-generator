@@ -353,6 +353,8 @@ fi
 [ -f "$PROJECT_ROOT/secrets/initial_admin_password" ] || fail "initial admin password was removed before handoff"
 [ ! -e "$PROJECT_ROOT/secrets/smoke_test_password" ] || fail "temporary smoke password was not removed after successful smoke"
 grep -q '^INITIAL_ADMIN_HANDOFF=pending$' "$PROJECT_ROOT/deployment-state/current.env" || fail "handoff state was not recorded as pending"
+(cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 is not valid after first install"
+grep -q '  current.env$' "$PROJECT_ROOT/deployment-state/current.env.sha256" || fail "current.env.sha256 does not record current.env after first install"
 rm -f "$FAKE_STATE_DIR"/db-created "$FAKE_STATE_DIR"/app-started "$FAKE_STATE_DIR"/migrated "$FAKE_STATE_DIR"/bootstrapped
 
 write_install_passwords
@@ -364,6 +366,8 @@ fi
 if grep -q 'DoNotLeak' "$FAKE_DOCKER_LOG"; then
   fail "password appeared in upgrade fake Docker/curl argv log"
 fi
+(cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 is not valid after upgrade"
+grep -q '  current.env$' "$PROJECT_ROOT/deployment-state/current.env.sha256" || fail "current.env.sha256 does not record current.env after upgrade"
 
 write_install_passwords
 printf '%s\n' 'WrongAdminSecret-DoNotLeak-2026!' >"$PROJECT_ROOT/secrets/wrong_admin_password"
@@ -375,17 +379,32 @@ if RUN_SMOKE_ADMIN_PASSWORD_FILE=$PROJECT_ROOT/secrets/wrong_admin_password run_
 fi
 after_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
 [ "$before_state_hash" = "$after_state_hash" ] || fail "failed smoke committed deployment state"
+rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
 
 write_install_passwords
 printf '%s\n' "$SMOKE_PASSWORD" >"$PROJECT_ROOT/secrets/alternate_smoke_password"
 chmod 600 "$PROJECT_ROOT/secrets/alternate_smoke_password"
 before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+before_alternate_hash=$(sha256sum "$PROJECT_ROOT/secrets/alternate_smoke_password" | awk '{print $1}')
 : >"$FAKE_DOCKER_LOG"
 if RUN_SMOKE_TEST_PASSWORD_FILE=$PROJECT_ROOT/secrets/alternate_smoke_password run_deploy >/dev/null 2>&1; then
   fail "alternate smoke password file was accepted"
 fi
 [ -f "$PROJECT_ROOT/secrets/alternate_smoke_password" ] || fail "alternate smoke password file was deleted"
+after_alternate_hash=$(sha256sum "$PROJECT_ROOT/secrets/alternate_smoke_password" | awk '{print $1}')
+[ "$before_alternate_hash" = "$after_alternate_hash" ] || fail "alternate smoke password file was modified"
 after_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
 [ "$before_state_hash" = "$after_state_hash" ] || fail "alternate smoke file failure committed deployment state"
+if grep -q 'pg_dump' "$FAKE_DOCKER_LOG"; then
+  fail "alternate smoke file validation ran after backup"
+fi
+if grep -q 'alembic -c /opt/app/server/alembic.ini upgrade head' "$FAKE_DOCKER_LOG"; then
+  fail "alternate smoke file validation ran after migration"
+fi
+if grep -q 'docker-compose .* up .* app' "$FAKE_DOCKER_LOG"; then
+  fail "alternate smoke file validation ran after app startup"
+fi
+[ ! -e "$PROJECT_ROOT/deployment-state/pending.env" ] || fail "alternate smoke file failure wrote pending deployment state"
+[ ! -e "$PROJECT_ROOT/deployment-state/pending.env.sha256" ] || fail "alternate smoke file failure wrote pending deployment checksum"
 
 echo "PASS: first-install admin bootstrap and smoke credential behavior verified."

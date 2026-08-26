@@ -35,10 +35,15 @@ state_file=$project_root/deployment-state/current.env
 state_hash=$project_root/deployment-state/current.env.sha256
 tmp_state=$project_root/deployment-state/current.env.handoff
 tmp_hash=$project_root/deployment-state/current.env.sha256.handoff
+tmp_check_dir=
 state_backup=$project_root/deployment-state/current.env.before-handoff
 hash_backup=$project_root/deployment-state/current.env.sha256.before-handoff
 
 rollback_state() {
+  if [ -n "$tmp_check_dir" ]; then
+    rm -f "$tmp_check_dir/current.env" "$tmp_check_dir/current.env.sha256"
+    rmdir "$tmp_check_dir" 2>/dev/null || true
+  fi
   if [ -f "$state_backup" ] && [ -f "$hash_backup" ]; then
     mv "$state_backup" "$state_file"
     mv "$hash_backup" "$state_hash"
@@ -64,8 +69,15 @@ awk '
 ' "$state_file" >"$tmp_state"
 chmod 600 "$tmp_state"
 tmp_sha=$(sha256sum "$tmp_state" | awk '{print $1}')
-printf '%s  %s\n' "$tmp_sha" "$state_file" >"$tmp_hash"
+printf '%s  current.env\n' "$tmp_sha" >"$tmp_hash"
 [ -s "$tmp_state" ] && [ -s "$tmp_hash" ]
+tmp_check_dir=$(mktemp -d "$project_root/deployment-state/.current-env-handoff-check.XXXXXX")
+cp -p "$tmp_state" "$tmp_check_dir/current.env"
+cp -p "$tmp_hash" "$tmp_check_dir/current.env.sha256"
+(cd "$tmp_check_dir" && sha256sum -c current.env.sha256)
+rm -f "$tmp_check_dir/current.env" "$tmp_check_dir/current.env.sha256"
+rmdir "$tmp_check_dir"
+tmp_check_dir=
 cp -p "$state_file" "$state_backup"
 cp -p "$state_hash" "$hash_backup"
 
