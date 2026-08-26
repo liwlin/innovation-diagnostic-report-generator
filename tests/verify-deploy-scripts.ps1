@@ -18,6 +18,11 @@ function Assert-Condition {
 }
 
 foreach ($relative in $requiredScripts) {
+    $gitEntry = git -C $projectRoot ls-files -s -- $relative
+    Assert-Condition ($LASTEXITCODE -eq 0) "Failed to inspect Git mode for deployment script: $relative"
+    Assert-Condition (-not [string]::IsNullOrWhiteSpace($gitEntry)) "Deployment script is not tracked by Git: $relative"
+    Assert-Condition ($gitEntry -match '^100755\s+[0-9a-f]{40,64}\s+\d+\t') "Deployment script must be tracked as executable mode 100755: $relative"
+
     $path = Join-Path $projectRoot $relative
     Assert-Condition (Test-Path -LiteralPath $path -PathType Leaf) "Missing deployment script: $relative"
     $source = Get-Content -LiteralPath $path -Raw -Encoding UTF8
