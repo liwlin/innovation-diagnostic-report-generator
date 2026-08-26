@@ -28,6 +28,19 @@ assert_contains() {
   esac
 }
 
+assert_git_executable_source() {
+  relative=$1
+  entry=$(git -C "$PROJECT_DIR" ls-files -s -- "$relative" 2>/dev/null || true)
+  if [ -z "$entry" ] && command -v git.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
+    project_windows=$(wslpath -w "$PROJECT_DIR")
+    entry=$(git.exe -C "$project_windows" ls-files -s -- "$relative" 2>/dev/null | tr -d '\r' || true)
+  fi
+  case "$entry" in
+    100755[[:space:]]*) ;;
+    *) fail "Git/archive source mode must be 100755 for $relative" ;;
+  esac
+}
+
 require_cleanup_target() {
   target=$1
   resolved=$(realpath "$target" 2>/dev/null || printf '%s' "$target")
@@ -153,7 +166,6 @@ copy_release_fixture() {
   mkdir -p "$release_root/deploy"
   cp -R "$PROJECT_DIR/deploy/." "$release_root/deploy/"
   chmod +x "$release_root"/deploy/scripts/*.sh
-  chmod +x "$release_root"/deploy/postgres-init/10-create-runtime-role.sh
   (
     cd "$release_root"
     find deploy -type f | LC_ALL=C sort | while IFS= read -r file; do
@@ -277,6 +289,7 @@ EOF
 [ "$(uname -s)" = "Linux" ] || fail "Linux test must run on Linux"
 assert_ephemeral_runner
 command -v sudo >/dev/null 2>&1 || fail "sudo is required to prepare exact /volume1/docker roots"
+assert_git_executable_source deploy/postgres-init/10-create-runtime-role.sh
 prepare_volume_root
 
 TMP_DIR=$(mktemp -d)

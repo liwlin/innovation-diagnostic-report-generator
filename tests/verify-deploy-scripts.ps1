@@ -9,7 +9,8 @@ $requiredScripts = @(
     'deploy/scripts/install-layout.sh',
     'deploy/scripts/smoke.sh',
     'deploy/scripts/deploy.sh',
-    'deploy/scripts/rollback.sh'
+    'deploy/scripts/rollback.sh',
+    'deploy/postgres-init/10-create-runtime-role.sh'
 )
 
 function Assert-Condition {
