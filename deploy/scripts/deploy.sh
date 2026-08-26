@@ -7,6 +7,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 
 require_exact_project_root
 : "${RELEASE_ROOT:?RELEASE_ROOT is required}"
+: "${RELEASE_ID:?RELEASE_ID is required}"
 : "${APP_VERSION:?APP_VERSION is required}"
 : "${APP_IMAGE:?APP_IMAGE is required}"
 : "${PREFLIGHT_NONCE:?PREFLIGHT_NONCE is required}"
@@ -18,7 +19,7 @@ case "$MIGRATION_COMPATIBILITY" in
   *) echo "ABORT: MIGRATION_COMPATIBILITY must be backward-compatible or incompatible" >&2; exit 80 ;;
 esac
 
-"$SCRIPT_DIR/preflight.sh" >/dev/null
+PREFLIGHT_MODE=runtime "$SCRIPT_DIR/preflight.sh" >/dev/null
 
 lock_dir="$PROJECT_ROOT/.deploy-lock"
 if ! mkdir "$lock_dir" 2>/dev/null; then

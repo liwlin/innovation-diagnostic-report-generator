@@ -11,12 +11,13 @@
 
 ```sh
 set -eu
-cd /volume1/docker/makerseed-diagnostic/current/deploy
 set -a
 . /volume1/docker/makerseed-diagnostic/.env
 set +a
 export PROJECT_ROOT=/volume1/docker/makerseed-diagnostic
-export RELEASE_ROOT=/volume1/docker/makerseed-diagnostic/current/deploy
+: "${RELEASE_ID:?RELEASE_ID is required}"
+: "${RELEASE_ROOT:?RELEASE_ROOT is required}"
+cd "$RELEASE_ROOT"
 ./scripts/backup.sh
 latest=$(find /volume1/docker/makerseed-diagnostic/backups -maxdepth 1 -type f -name 'makerseed_*.dump' -print | sort | tail -n 1)
 [ -n "$latest" ]

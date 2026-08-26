@@ -254,11 +254,11 @@ Require preflight collision checks, exact target check before directory creation
 
 - [x] **Step 2: Implement read-only preflight**
 
-`preflight.sh` verifies architecture `x86_64`, required Docker/Compose versions, exact parent path, sufficient disk/memory, target path state, unique Compose project/container/port, required images or import bundles, secret modes, and that all declared mounts resolve under approved roots. It outputs a machine-readable verdict and performs no writes.
+`preflight.sh` runs as one read-only script with `PREFLIGHT_MODE=bootstrap|runtime`. Bootstrap mode validates the absent final project root, the root-owned nonce-bound staged release under `/volume1/docker/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>`, the canonical `release-tree.sha256`, collision/resource/image evidence, and emits a `binding_hash` without requiring final secrets. Runtime mode validates the final immutable `RELEASE_ROOT`, `.env`, `SECRETS_ROOT`, all runtime and maintenance secrets including `database_owner_url`, final mounts, collision/resource/image evidence, and is the only preflight mode that may approve `deploy.sh`.
 
 - [x] **Step 3: Implement one-time isolated layout creation**
 
-`install-layout.sh` runs only after a successful preflight nonce, creates exact project subdirectories without following symlinks, applies UID/GID/modes, creates no shared folder or DSM account, and refuses any pre-existing unexpected file.
+`install-layout.sh` runs only after a successful bootstrap preflight nonce and exact `PREFLIGHT_BINDING_HASH`, creates the exact project subdirectories from an absent final root without following symlinks, copies the verified staged release through `releases/.incoming-<release-id>-<nonce>`, re-verifies the copied tree, then atomically publishes `releases/<release-id>`. It creates no shared folder or DSM account and refuses existing target or incoming paths.
 
 - [x] **Step 4: Implement versioned deployment and smoke**
 
@@ -384,7 +384,7 @@ Record NAS kernel/architecture, free memory, target volume free space, Docker/Co
 
 - [ ] **Step 3: Run preflight and verify zero writes on failure**
 
-Transfer signed/checksummed release scripts into a temporary project-named staging path, run `preflight.sh`, and compare target path/container state before/after. Any collision, symlink, port use, unverified digest, or secret-mode failure stops the deployment.
+Transfer signed/checksummed release content into `/volume1/docker/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>/release`, write its canonical sorted `release-tree.sha256`, run `PREFLIGHT_MODE=bootstrap preflight.sh`, and compare target path/container state before/after. Any existing project root, unsafe stage, manifest mismatch, extra file, collision, symlink, port use, or unverified digest stops before final-root writes. After layout and secret creation, run `PREFLIGHT_MODE=runtime preflight.sh`; only runtime mode may approve `deploy.sh`.
 
 - [ ] **Step 4: Install exact isolated layout and secrets**
 

@@ -17,7 +17,7 @@ DSM 账号清单后，才进入 promoted 阶段。
 - 开启数据校验和/快照（若当前卷和 DSM 支持）。
 - 将运行环境改为 `REPORT_ROOT_PHASE=promoted`。
 - 将 `REPORT_ROOT` 精确改为 `/volume1/科创诊断报告`。
-- 重新运行 `deploy/scripts/preflight.sh`，必须看到 verdict 中
+- 以 `PREFLIGHT_MODE=runtime` 重新运行 `deploy/scripts/preflight.sh`，必须看到 verdict 中
   `report_root_phase` 为 `promoted` 后才允许部署。
 
 ## 权限

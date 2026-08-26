@@ -33,7 +33,11 @@ foreach ($relative in $requiredScripts) {
 
 foreach ($relative in @('deploy/scripts/migrate.sh', 'deploy/scripts/backup.sh', 'deploy/scripts/restore-verify.sh', 'deploy/scripts/preflight.sh', 'deploy/scripts/install-layout.sh', 'deploy/scripts/smoke.sh', 'deploy/scripts/deploy.sh', 'deploy/scripts/rollback.sh')) {
     $source = Get-Content -LiteralPath (Join-Path $projectRoot $relative) -Raw -Encoding UTF8
-    $guardPosition = $source.IndexOf('require_exact_project_root')
+    $guardPositions = @(
+        $source.IndexOf('require_exact_project_root'),
+        $source.IndexOf('require_project_root_identity')
+    ) | Where-Object { $_ -ge 0 } | Sort-Object
+    $guardPosition = if ($guardPositions.Count -gt 0) { $guardPositions[0] } else { -1 }
     $dockerPosition = $source.IndexOf('compose ')
     Assert-Condition ($guardPosition -ge 0) "$relative does not call require_exact_project_root."
     Assert-Condition ($dockerPosition -lt 0 -or $guardPosition -lt $dockerPosition) "$relative calls Docker before the root guard."
@@ -53,6 +57,7 @@ Assert-Condition ($restore -match 'dropdb') 'Restore verification does not clean
 Assert-Condition ($restore -notmatch 'pg_restore[^\r\n]*makerseed(?:\s|"|''|$)') 'Restore script may target the live makerseed database.'
 
 $preflight = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/preflight.sh') -Raw -Encoding UTF8
+$preflightCommon = $preflight + (Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/common.sh') -Raw -Encoding UTF8)
 $envExample = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/env.example') -Raw -Encoding UTF8
 $composeYaml = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/compose.yaml') -Raw -Encoding UTF8
 Assert-Condition ($envExample -match 'REPORT_ROOT_PHASE=isolated') 'env.example must default hardware preflight to the isolated report-root phase.'
@@ -64,6 +69,20 @@ Assert-Condition ($composeYaml -match 'source:\s*\$\{REPORT_ROOT') 'Compose must
 foreach ($mutation in @('mkdir', 'touch', 'docker pull', 'docker load', 'docker-compose up', 'mv ', 'cp ')) {
     Assert-Condition ($preflight -notlike "*$mutation*") "Preflight must remain read-only; found: $mutation"
 }
+Assert-Condition ($preflight -match 'PREFLIGHT_MODE') 'Preflight must require bootstrap/runtime modes.'
+Assert-Condition ($preflight -match 'bootstrap\)') 'Preflight must implement bootstrap mode.'
+Assert-Condition ($preflight -match 'runtime\)') 'Preflight must implement runtime mode.'
+Assert-Condition ($preflight -match 'BOOTSTRAP_STAGE') 'Bootstrap preflight must validate the isolated bootstrap stage.'
+Assert-Condition ($preflight -match 'STAGED_RELEASE_ROOT') 'Bootstrap preflight must validate the staged release root.'
+Assert-Condition ($preflight -match 'RELEASE_TREE_MANIFEST') 'Bootstrap preflight must verify the staged release tree manifest.'
+Assert-Condition ($preflight -match 'binding_hash') 'Preflight verdict must include the release binding hash.'
+Assert-Condition ($preflight -match 'project_root_before_state') 'Preflight verdict must include the project-root before-state.'
+Assert-Condition ($preflight -match 'database_owner_url') 'Runtime preflight must require the owner migration URL secret.'
+Assert-Condition ($preflight -match 'PROJECT_ROOT.*must not exist for bootstrap') 'Bootstrap preflight must fail closed when the final project root already exists.'
+$bootstrapFunction = [regex]::Match($preflight, '(?ms)bootstrap_preflight\(\)\s*\{(?<body>.*?)\n\}').Groups['body'].Value
+Assert-Condition (-not [string]::IsNullOrWhiteSpace($bootstrapFunction)) 'Bootstrap preflight function is missing.'
+Assert-Condition ($bootstrapFunction -notmatch 'SECRETS_ROOT is required') 'Bootstrap preflight must not require final secrets.'
+Assert-Condition ($bootstrapFunction -notmatch 'RELEASE_ROOT is required') 'Bootstrap preflight must not require the final release root.'
 Assert-Condition ($preflight -match 'PREFLIGHT_NONCE') 'Preflight must require and report a caller-provided nonce.'
 Assert-Condition ($preflight -match 'MIN_COMPOSE_VERSION') 'Preflight must enforce a minimum Docker Compose version.'
 Assert-Condition ($preflight -match 'stat -c %a') 'Preflight must validate secret file modes.'
@@ -79,7 +98,7 @@ foreach ($bindSource in @('data/postgres', 'backups', 'postgres-init/10-create-r
     Assert-Condition ($preflight -like "*$bindSource*") "Preflight must validate bind source: $bindSource"
 }
 Assert-Condition ($preflight -match 'canonical_bind_source') 'Preflight must canonicalize every declared bind source.'
-Assert-Condition ($preflight -match 'must not be a symbolic link') 'Preflight must reject symlinked bind sources.'
+Assert-Condition ($preflightCommon -match 'must not be a symbolic link') 'Preflight must reject symlinked bind sources.'
 Assert-Condition ($preflight -match '"nonce":"%s"') 'Preflight verdict must include the nonce for install-layout binding.'
 Assert-Condition ($preflight -match 'docker ps[^\r\n]*com\.docker\.compose\.project=makerseed-diagnostic') 'Preflight must check project container collisions.'
 Assert-Condition ($preflight -match 'docker ps[^\r\n]*publish=18081') 'Preflight must inspect the actual port 18081 owner.'
@@ -89,9 +108,14 @@ foreach ($containerName in @('makerseed-diagnostic-app-1', 'makerseed-diagnostic
 }
 
 $layout = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/install-layout.sh') -Raw -Encoding UTF8
+Assert-Condition ($layout -match 'PREFLIGHT_BINDING_HASH') 'Install layout must require the successful bootstrap binding hash.'
+Assert-Condition ($layout -match 'PREFLIGHT_MODE=bootstrap') 'Install layout must re-run bootstrap preflight.'
+Assert-Condition ($layout -match 're-verify copied release tree') 'Install layout must re-verify the copied release tree before publishing it.'
+Assert-Condition ($layout -match '\.incoming-\$RELEASE_ID-\$PREFLIGHT_NONCE') 'Install layout must copy through a nonce-bound incoming release path.'
+Assert-Condition ($layout -match 'mv "\$incoming_release" "\$target_release"') 'Install layout must atomically publish the copied immutable release.'
 Assert-Condition ($layout -match 'PREFLIGHT_NONCE') 'Install layout must require the successful preflight nonce.'
 Assert-Condition ($layout -match 'preflight\.sh') 'Install layout must bind itself to a fresh successful preflight.'
-Assert-Condition ($layout -match 'unexpected entry exists in project root') 'Install layout must reject unexpected pre-existing entries.'
+Assert-Condition ($layout -match 'project root exists before bootstrap layout') 'Install layout must reject any pre-existing project root before bootstrap writes.'
 Assert-Condition ($layout -notmatch '(synoshare|synouser|synogroup)') 'Install layout must not create DSM shares, users, or groups.'
 
 $deploy = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/deploy.sh') -Raw -Encoding UTF8
