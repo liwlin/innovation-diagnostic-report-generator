@@ -227,7 +227,7 @@ printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nDB_IMAGE=%s\nDB_CONTAINER
   "$RELEASE_ROOT" "$APP_IMAGE" "$APP_VERSION" "$db_image" "$db_container_config_hash" "$schema_compatible" "$backup_file" \
   "$previous_release" "$previous_image" "$previous_version" "$initial_admin_handoff" >"$pending_state"
 chmod 600 "$pending_state"
-sha256sum "$pending_state" >"$pending_state.sha256"
+(cd "$state_dir" && sha256sum pending.env > pending.env.sha256)
 
 final_stage_dir=''
 commit_started=0

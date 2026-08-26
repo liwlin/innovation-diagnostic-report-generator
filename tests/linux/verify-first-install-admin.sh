@@ -248,6 +248,7 @@ EOF
   cat >"$fake_dir/sha256sum" <<'EOF'
 #!/bin/sh
 set -eu
+printf '%s\n' "sha256sum $*" >> "$FAKE_DOCKER_LOG"
 if [ "${FAKE_FAIL_DEPLOY_SHA256:-}" = "final-stage" ] && [ "$#" -eq 1 ] && [ "$1" = "current.env" ]; then
   exit 96
 fi
@@ -390,7 +391,7 @@ manual_test_dest() {
 assert_no_manual_rollback_credentials() {
   [ ! -e "$(manual_admin_dest)" ] && [ ! -L "$(manual_admin_dest)" ] || fail "manual helper left admin credential destination"
   [ ! -e "$(manual_test_dest)" ] && [ ! -L "$(manual_test_dest)" ] || fail "manual helper left smoke credential destination"
-  if find "$PROJECT_ROOT/secrets" -maxdepth 1 -name 'manual_rollback_*prepare.*' -print | grep . >/dev/null 2>&1; then
+  if find "$PROJECT_ROOT/secrets" -maxdepth 1 -name '.manual-rollback-credentials.*' -print | grep . >/dev/null 2>&1; then
     fail "manual helper left this-run temp credential files"
   fi
 }
@@ -716,6 +717,34 @@ assert_manual_rollback_rejected_before_mutation() {
   fi
 }
 
+assert_no_rollback_checksum_command() {
+  if grep -q 'sha256sum -c' "$FAKE_DOCKER_LOG"; then
+    fail "rejected rollback checked checksum before exact state classification"
+  fi
+}
+
+assert_pending_rollback_rejected_before_docker() {
+  expected_env_hash=$1
+  expected_state_hash=$2
+  expected_checksum_hash=$3
+  expected_current_target=$4
+  actual_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+  actual_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+  actual_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+  [ "$expected_env_hash" = "$actual_env_hash" ] || fail "rejected pending rollback changed .env"
+  [ "$expected_state_hash" = "$actual_state_hash" ] || fail "rejected pending rollback changed current.env"
+  [ "$expected_checksum_hash" = "$actual_checksum_hash" ] || fail "rejected pending rollback changed current.env.sha256"
+  [ "$(readlink "$PROJECT_ROOT/current")" = "$expected_current_target" ] || fail "rejected pending rollback changed current symlink"
+  if grep -q 'docker-compose .* up .* app' "$FAKE_DOCKER_LOG"; then
+    fail "malformed pending checksum was accepted before Docker mutation"
+  fi
+}
+
+assert_pending_checksum_canonical() {
+  [ -f "$PROJECT_ROOT/deployment-state/pending.env.sha256" ] || fail "pending.env.sha256 was not retained for failed deploy"
+  grep -Eq '^[0-9a-f]{64}  pending\.env$' "$PROJECT_ROOT/deployment-state/pending.env.sha256" || fail "pending.env.sha256 does not record canonical pending.env"
+}
+
 assert_manual_rollback_cleanup_failure_left_rolled_back_state() {
   expected_db_image=$1
   expected_db_config_hash=$2
@@ -999,6 +1028,75 @@ rm -f "$PROJECT_ROOT/deployment-state/current.env.before-manual-rollback" \
   "$PROJECT_ROOT/deployment-state/current.before-manual-rollback"
 
 stage_manual_rollback_active_release
+cat >"$PROJECT_ROOT/deployment-state/other.env" <<EOF
+RELEASE_ROOT=$ROLLBACK_RELEASE_ROOT
+APP_IMAGE=$ROLLBACK_APP_IMAGE
+APP_VERSION=$ROLLBACK_RELEASE_ID
+DB_IMAGE=$manual_db_image
+DB_CONTAINER_CONFIG_HASH=$manual_db_config_hash
+SCHEMA_COMPATIBLE=true
+BACKUP_FILE=
+PREVIOUS_RELEASE_ROOT=$RELEASE_ROOT
+PREVIOUS_APP_IMAGE=$APP_IMAGE
+PREVIOUS_APP_VERSION=$RELEASE_ID
+INITIAL_ADMIN_HANDOFF=pending
+EOF
+chmod 600 "$PROJECT_ROOT/deployment-state/other.env"
+(cd "$PROJECT_ROOT/deployment-state" && sha256sum other.env > other.env.sha256)
+before_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+before_current_target=$(readlink "$PROJECT_ROOT/current")
+write_install_passwords
+: >"$FAKE_DOCKER_LOG"
+if run_rollback "$PROJECT_ROOT/deployment-state/other.env" >/dev/null 2>&1; then
+  fail "rollback accepted non-current non-pending state file with checksum"
+fi
+assert_manual_rollback_rejected_before_mutation "$before_env_hash" "$before_state_hash" "$before_checksum_hash" "$before_current_target"
+assert_no_rollback_checksum_command
+rm -f "$PROJECT_ROOT/deployment-state/other.env" "$PROJECT_ROOT/deployment-state/other.env.sha256"
+
+cat >"$PROJECT_ROOT/deployment-state/pending.env" <<EOF
+RELEASE_ROOT=$ROLLBACK_RELEASE_ROOT
+APP_IMAGE=$ROLLBACK_APP_IMAGE
+APP_VERSION=$ROLLBACK_RELEASE_ID
+DB_IMAGE=$manual_db_image
+DB_CONTAINER_CONFIG_HASH=$manual_db_config_hash
+SCHEMA_COMPATIBLE=true
+BACKUP_FILE=
+PREVIOUS_RELEASE_ROOT=$RELEASE_ROOT
+PREVIOUS_APP_IMAGE=$APP_IMAGE
+PREVIOUS_APP_VERSION=$RELEASE_ID
+INITIAL_ADMIN_HANDOFF=pending
+EOF
+chmod 600 "$PROJECT_ROOT/deployment-state/pending.env"
+printf 'decoy\n' >"$PROJECT_ROOT/deployment-state/decoy.env"
+for pending_checksum_case in other-file absolute-path extra-line; do
+  case "$pending_checksum_case" in
+    other-file)
+      (cd "$PROJECT_ROOT/deployment-state" && sha256sum decoy.env > pending.env.sha256)
+      ;;
+    absolute-path)
+      (cd "$PROJECT_ROOT/deployment-state" && sha256sum "$PROJECT_ROOT/deployment-state/pending.env" > pending.env.sha256)
+      ;;
+    extra-line)
+      (cd "$PROJECT_ROOT/deployment-state" && sha256sum pending.env > pending.env.sha256 && sha256sum decoy.env >> pending.env.sha256)
+      ;;
+  esac
+  before_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+  before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+  before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+  before_current_target=$(readlink "$PROJECT_ROOT/current")
+  write_install_passwords
+  : >"$FAKE_DOCKER_LOG"
+  if run_rollback "$PROJECT_ROOT/deployment-state/pending.env" >/dev/null 2>&1; then
+    fail "rollback accepted malformed pending checksum: $pending_checksum_case"
+  fi
+  assert_pending_rollback_rejected_before_docker "$before_env_hash" "$before_state_hash" "$before_checksum_hash" "$before_current_target"
+done
+rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256" "$PROJECT_ROOT/deployment-state/decoy.env"
+
+stage_manual_rollback_active_release
 manual_db_image=$(sed -n 's/^DB_IMAGE=//p' "$PROJECT_ROOT/deployment-state/current.env")
 manual_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$PROJECT_ROOT/deployment-state/current.env")
 write_manual_rollback_passwords
@@ -1018,6 +1116,7 @@ if RUN_FAIL_DEPLOY_SHA256=final-stage run_deploy >/dev/null 2>&1; then
   fail "final checksum staging failure reported deploy success"
 fi
 assert_current_state_unchanged "$before_state_hash" "$before_checksum_hash"
+assert_pending_checksum_canonical
 assert_smoke_password_unchanged "$before_smoke_hash"
 rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
 

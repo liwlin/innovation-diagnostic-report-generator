@@ -193,6 +193,8 @@ Assert-Condition ($smokePasswordDeletePosition -gt $publishedHashCheckPosition) 
 Assert-Condition ($deploy -notmatch 'rm -f "\$INITIAL_ADMIN_PASSWORD_FILE"') 'Deploy must not remove the preserved initial admin password automatically.'
 Assert-Condition ($deploy -match 'final_stage_dir=\$\(mktemp -d "\$state_dir/\.current-env-stage\.XXXXXX"\)') 'Deploy must stage final state/checksum in an isolated nonce-bound directory before publishing.'
 Assert-Condition ($deploy -match 'cp -p "\$pending_state" "\$final_stage_dir/current\.env"') 'Deploy must pre-stage final current.env content from pending state.'
+Assert-Condition ($deploy -match '\(cd "\$state_dir" && sha256sum pending\.env > pending\.env\.sha256\)') 'Deploy must create pending.env.sha256 canonically from within deployment-state.'
+Assert-Condition ($deploy -notmatch 'sha256sum "\$pending_state" >"\$pending_state\.sha256"') 'Deploy must not create pending.env.sha256 with an absolute pending.env path.'
 Assert-Condition ($deploy -match 'sha256sum current\.env > current\.env\.sha256') 'Deploy must stage a final checksum that records current.env, not pending.env.'
 Assert-Condition ($deploy -match 'sha256sum -c current\.env\.sha256') 'Deploy must verify the staged and published current.env checksum.'
 Assert-Condition ($deploy -match 'commit_started=0' -and $deploy -match 'commit_complete=0') 'Deploy must track final state commit start/completion for rollback.'
@@ -215,6 +217,12 @@ $manualStagePosition = $rollback.IndexOf('manual_stage_dir=$(mktemp -d "$state_d
 $manualPublishedHashCheckPosition = $rollback.LastIndexOf('(cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)')
 $rollbackSymlinkPosition = $rollback.IndexOf('ln -sfn "$previous_release" "$PROJECT_ROOT/current"')
 $manualCommitCompletePosition = $rollback.IndexOf('manual_commit_complete=1')
+$rollbackCurrentClassPosition = $rollback.IndexOf('if [ "$resolved_state" = "$current_state" ]')
+$rollbackPendingClassPosition = $rollback.IndexOf('elif [ "$resolved_state" = "$pending_state" ]')
+$rollbackSelectedHashPosition = $rollback.IndexOf('selected_state_hash="$resolved_state.sha256"')
+$rollbackCanonicalHashPosition = $rollback.IndexOf('require_canonical_state_sha256 "$selected_state_hash" "$selected_state_name"')
+$rollbackSelectedShaCheckPosition = $rollback.IndexOf('(cd "$state_dir" && sha256sum -c "$selected_state_name.sha256")')
+$rollbackFirstStateReadPosition = $rollback.IndexOf('previous_release=$(read_required_single_field "$resolved_state" PREVIOUS_RELEASE_ROOT)')
 Assert-Condition ($rollback -match 'deployment-state') 'Rollback does not require recorded deployment state.'
 Assert-Condition ($rollback -match 'sha256sum') 'Rollback does not verify its state or backup proof.'
 Assert-Condition ($rollback -match 'CONFIRM_INCOMPATIBLE_SCHEMA_RESTORE') 'Rollback must require a separate confirmation for incompatible-schema database restore.'
@@ -224,8 +232,14 @@ Assert-Condition ($rollback -match 'compose stop app') 'Rollback must stop app b
 Assert-Condition ($rollback -match 'if \[ "\$resolved_state" = "\$current_state" \]') 'Rollback must distinguish exact current.env manual rollback from pending automatic rollback.'
 Assert-Condition ($rollback -match 'elif \[ "\$resolved_state" = "\$pending_state" \]') 'Rollback must accept only exact pending.env for automatic rollback.'
 Assert-Condition ($rollback -match 'unsupported deployment-state file') 'Rollback must reject non-current non-pending state files before mutation.'
+Assert-Condition ($rollbackCurrentClassPosition -ge 0 -and $rollbackPendingClassPosition -gt $rollbackCurrentClassPosition) 'Rollback must classify exact current.env/pending.env explicitly.'
+Assert-Condition ($rollbackSelectedHashPosition -gt $rollbackPendingClassPosition) 'Rollback must reject unsupported state files before deriving any .sha256 path.'
+Assert-Condition ($rollbackCanonicalHashPosition -gt $rollbackSelectedHashPosition -and $rollbackCanonicalHashPosition -lt $rollbackSelectedShaCheckPosition) 'Rollback must validate canonical checksum syntax before sha256sum -c.'
+Assert-Condition ($rollbackSelectedShaCheckPosition -gt $rollbackCanonicalHashPosition -and $rollbackSelectedShaCheckPosition -lt $rollbackFirstStateReadPosition) 'Rollback must verify the selected canonical checksum before reading state fields.'
+Assert-Condition ($rollback -match 'require_canonical_state_sha256 "\$selected_state_hash" "\$selected_state_name"') 'Rollback must validate current.env and pending.env checksum syntax through the selected basename.'
+Assert-Condition ($rollback -match 'state checksum must contain exactly one canonical') 'Rollback must require exactly one canonical state checksum line.'
 Assert-Condition ($rollback -match 'require_regular_state_file "\$project_env" "\.env"') 'Manual rollback must require .env to be a regular non-symlink file before Docker mutation.'
-Assert-Condition ($rollback -match 'require_canonical_current_env_sha256 "\$current_state\.sha256"') 'Manual rollback must require canonical current.env.sha256 syntax.'
+Assert-Condition ($rollback -match 'require_canonical_state_sha256 "\$selected_state_hash" "\$selected_state_name"') 'Manual rollback must require canonical current.env.sha256 syntax.'
 Assert-Condition ($rollback -match 'require_manual_smoke_file "\$SECRETS_ROOT/manual_rollback_admin_password"') 'Manual rollback must consume the exact manual admin password file under secrets.'
 Assert-Condition ($rollback -match 'require_manual_smoke_file "\$SECRETS_ROOT/manual_rollback_smoke_test_password"') 'Manual rollback must consume the exact manual smoke-test password file under secrets.'
 Assert-Condition ($rollback -match 'require_bounded_username "\$SMOKE_ADMIN_USERNAME"') 'Manual rollback must bound the smoke admin username.'

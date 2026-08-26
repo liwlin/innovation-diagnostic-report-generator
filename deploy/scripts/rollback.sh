@@ -27,29 +27,30 @@ require_regular_state_file() {
   fi
 }
 
-require_canonical_current_env_sha256() {
+require_canonical_state_sha256() {
   hash_file=$1
+  state_name=$2
   line_count=$(wc -l <"$hash_file" | awk '{print $1}')
   if [ "$line_count" -ne 1 ]; then
-    echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+    echo "ABORT: state checksum must contain exactly one canonical $state_name checksum line" >&2
     exit 92
   fi
   line=$(sed -n '1p' "$hash_file")
-  digest=${line%  current.env}
+  digest=${line%  $state_name}
   case "$line" in
-    *"  current.env") ;;
+    *"  $state_name") ;;
     *)
-      echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+      echo "ABORT: state checksum must contain exactly one canonical $state_name checksum line" >&2
       exit 92
       ;;
   esac
   if [ "${#digest}" -ne 64 ]; then
-    echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+    echo "ABORT: state checksum must contain exactly one canonical $state_name checksum line" >&2
     exit 92
   fi
   case "$digest" in
     *[!0123456789abcdef]*)
-      echo "ABORT: current.env.sha256 must contain exactly one canonical current.env checksum line" >&2
+      echo "ABORT: state checksum must contain exactly one canonical $state_name checksum line" >&2
       exit 92
       ;;
   esac
@@ -164,21 +165,25 @@ case "$resolved_state" in
   "$state_dir"/*.env) ;;
   *) echo "ABORT: deployment-state file is outside the exact state directory" >&2; exit 91 ;;
 esac
-if [ ! -f "$resolved_state.sha256" ] || [ -L "$resolved_state.sha256" ]; then
-  echo "ABORT: deployment-state SHA-256 proof is missing or unsafe" >&2
-  exit 92
-fi
-(cd "$state_dir" && sha256sum -c "$(basename "$resolved_state").sha256") >/dev/null
 
 manual_state=0
 if [ "$resolved_state" = "$current_state" ]; then
   manual_state=1
+  selected_state_name=current.env
 elif [ "$resolved_state" = "$pending_state" ]; then
   manual_state=0
+  selected_state_name=pending.env
 else
   echo "ABORT: unsupported deployment-state file; use exact current.env for manual rollback or pending.env for deploy rollback" >&2
   exit 91
 fi
+selected_state_hash="$resolved_state.sha256"
+if [ ! -f "$selected_state_hash" ] || [ -L "$selected_state_hash" ]; then
+  echo "ABORT: deployment-state SHA-256 proof is missing or unsafe" >&2
+  exit 92
+fi
+require_canonical_state_sha256 "$selected_state_hash" "$selected_state_name"
+(cd "$state_dir" && sha256sum -c "$selected_state_name.sha256") >/dev/null
 
 manual_admin_password_file=''
 manual_smoke_test_password_file=''
@@ -200,8 +205,6 @@ if [ "$manual_state" -eq 1 ]; then
   require_regular_state_file "$project_env" ".env"
   require_regular_state_file "$current_state" "current.env"
   require_regular_state_file "$current_state.sha256" "current.env.sha256"
-  require_canonical_current_env_sha256 "$current_state.sha256"
-  (cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)
 fi
 
 previous_release=$(read_required_single_field "$resolved_state" PREVIOUS_RELEASE_ROOT)
