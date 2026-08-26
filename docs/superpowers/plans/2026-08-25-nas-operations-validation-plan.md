@@ -254,7 +254,7 @@ Require preflight collision checks, exact target check before directory creation
 
 - [x] **Step 2: Implement read-only preflight**
 
-`preflight.sh` runs as one read-only script with `PREFLIGHT_MODE=bootstrap|runtime`. Bootstrap mode validates the absent final project root, allows `/volume1/docker` to be absent, validates the root-owned nonce-bound staged release under `/volume1/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>`, the canonical `release-tree.sha256`, collision/resource/image evidence, and emits a `binding_hash` without requiring final secrets. Runtime mode validates the final immutable `RELEASE_ROOT`, `.env`, `SECRETS_ROOT`, all runtime and maintenance secrets including `database_owner_url`, final mounts, collision/resource/image evidence, and is the only preflight mode that may approve `deploy.sh`.
+`preflight.sh` runs as one read-only script with `PREFLIGHT_MODE=bootstrap|runtime`. Bootstrap mode validates the absent final project root, allows `/volume1/docker` to be absent, validates the root-owned nonce-bound staged release under `/volume1/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>`, the canonical `release-tree.sha256`, collision/resource/image evidence, and emits a `binding_hash` without requiring final secrets. Runtime mode validates the final immutable `RELEASE_ROOT`, `.env`, `SECRETS_ROOT`, all runtime and maintenance secrets including `database_owner_url`, final mounts, collision/resource/image evidence, and is the only preflight mode that may approve `deploy.sh`. Collision ownership accepts only project label `makerseed-diagnostic` plus a stable project-root working directory or a verified legacy release working directory; in both cases the `config_files` label must point to exactly one regular non-symlink `$PROJECT_ROOT/releases/<safe-id>/deploy/compose.yaml` whose hash matches the release's canonical `release-tree.sha256`.
 
 - [x] **Step 3: Implement one-time isolated layout creation**
 
@@ -262,7 +262,7 @@ Require preflight collision checks, exact target check before directory creation
 
 - [x] **Step 4: Implement versioned deployment and smoke**
 
-`deploy.sh` verifies image digest, saves current state, runs backup and disposable restore verification, migrates, recreates only `app`, waits for health, and calls `smoke.sh`. Smoke verifies health, unauthenticated 401, login with a temporary test account, CSRF rejection, authenticated session, create/search/update/trash/restore, and then removes test data through the application. Any failure invokes rollback.
+`deploy.sh` verifies image digest, saves current state, runs backup and disposable restore verification, migrates, recreates only `app`, waits for health, and calls `smoke.sh`. Every `docker-compose` invocation uses `--project-directory "$PROJECT_ROOT"` so new/recreated containers keep stable project-root labels across immutable release directories, while the DB may retain a manifest-verified legacy release working_dir label indefinitely. Smoke verifies health, unauthenticated 401, login with a temporary test account, CSRF rejection, authenticated session, create/search/update/trash/restore, and then removes test data through the application. Any failure invokes rollback.
 
 - [x] **Step 5: Implement rollback**
 
@@ -392,7 +392,7 @@ Create only `/volume1/docker/makerseed-diagnostic` children. Generate database/s
 
 - [ ] **Step 5: Start two containers and inspect hardening**
 
-Run `docker-compose -p makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, split networks (`backend` internal with `db` only there, `edge` non-internal with `app` only), and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
+Run `docker-compose -p makerseed-diagnostic --project-directory /volume1/docker/makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, split networks (`backend` internal with `db` only there, `edge` non-internal with `app` only), stable project-root labels for newly recreated containers, manifest-bound legacy release labels for unrecreated containers, and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
 
 - [ ] **Step 6: Execute real PostgreSQL and browser workflows through the tunnel**
 

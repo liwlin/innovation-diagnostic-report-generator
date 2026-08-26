@@ -154,12 +154,7 @@ verify_existing_db_state() {
     echo "ABORT: upgrade requires the existing db container to be running before deployment" >&2
     exit 81
   fi
-  owner_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$db_container")
-  owner_dir=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$db_container")
-  if [ "$owner_project" != "makerseed-diagnostic" ] || [ "$owner_dir" != "$PROJECT_ROOT" ]; then
-    echo "ABORT: running db container does not match the recorded project identity" >&2
-    exit 81
-  fi
+  verify_container_owner "$db_container" "running db container"
   health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$db_container")
   if [ "$health" != "healthy" ]; then
     echo "ABORT: existing db container is not healthy" >&2

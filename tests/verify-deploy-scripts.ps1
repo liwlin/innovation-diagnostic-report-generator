@@ -59,7 +59,8 @@ Assert-Condition ($restore -match 'dropdb') 'Restore verification does not clean
 Assert-Condition ($restore -notmatch 'pg_restore[^\r\n]*makerseed(?:\s|"|''|$)') 'Restore script may target the live makerseed database.'
 
 $preflight = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/preflight.sh') -Raw -Encoding UTF8
-$preflightCommon = $preflight + (Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/common.sh') -Raw -Encoding UTF8)
+$common = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/common.sh') -Raw -Encoding UTF8
+$preflightCommon = $preflight + $common
 $envExample = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/env.example') -Raw -Encoding UTF8
 $composeYaml = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/compose.yaml') -Raw -Encoding UTF8
 $dockerfile = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/Dockerfile') -Raw -Encoding UTF8
@@ -115,7 +116,23 @@ Assert-Condition ($preflightCommon -match 'must not be a symbolic link') 'Prefli
 Assert-Condition ($preflight -match '"nonce":"%s"') 'Preflight verdict must include the nonce for install-layout binding.'
 Assert-Condition ($preflight -match 'docker ps[^\r\n]*com\.docker\.compose\.project=makerseed-diagnostic') 'Preflight must check project container collisions.'
 Assert-Condition ($preflight -match 'docker ps[^\r\n]*publish=18081') 'Preflight must inspect the actual port 18081 owner.'
-Assert-Condition ($preflight -match 'com\.docker\.compose\.project\.working_dir') 'Preflight must verify the compose working directory for collisions.'
+Assert-Condition ($preflightCommon -match 'com\.docker\.compose\.project\.working_dir') 'Preflight must verify the compose working directory for collisions.'
+Assert-Condition ($preflightCommon -match 'com\.docker\.compose\.project\.config_files') 'Preflight must verify the compose config_files label for collisions.'
+Assert-Condition ($common -match '--project-directory "\$PROJECT_ROOT"') 'Compose wrapper must set a stable project directory before release-specific compose file arguments.'
+$projectDirectoryPosition = $common.IndexOf('--project-directory "$PROJECT_ROOT"')
+$envFilePosition = $common.IndexOf('--env-file "$PROJECT_ROOT/.env"')
+$composeFilePosition = $common.IndexOf('-f "$RELEASE_ROOT/compose.yaml"')
+Assert-Condition ($projectDirectoryPosition -ge 0 -and $projectDirectoryPosition -lt $envFilePosition -and $projectDirectoryPosition -lt $composeFilePosition) 'Compose wrapper must pass --project-directory as a global option before env-file and compose-file arguments.'
+Assert-Condition ($preflightCommon -match 'verify_container_config_binding') 'Preflight must bind legacy container config_files to a release manifest before accepting ownership.'
+Assert-Condition ($preflightCommon -match 'deploy/compose\.yaml') 'Preflight must verify the compose.yaml manifest entry for legacy container ownership.'
+Assert-Condition ($preflightCommon -match 'release-tree\.sha256') 'Preflight must verify a release-tree manifest for legacy container ownership.'
+$ownerFunction = [regex]::Match($preflightCommon, '(?ms)verify_container_owner\(\)\s*\{(?<body>.*?)\n\}').Groups['body'].Value
+Assert-Condition (-not [string]::IsNullOrWhiteSpace($ownerFunction)) 'Shared container owner verifier is missing.'
+$projectLabelPosition = $ownerFunction.IndexOf('com.docker.compose.project"')
+$workingDirPosition = $ownerFunction.IndexOf('com.docker.compose.project.working_dir')
+$configFilesPosition = $ownerFunction.IndexOf('com.docker.compose.project.config_files')
+$bindingVerifyPosition = $ownerFunction.IndexOf('verify_container_config_binding')
+Assert-Condition ($projectLabelPosition -ge 0 -and $workingDirPosition -gt $projectLabelPosition -and $configFilesPosition -gt $workingDirPosition -and $bindingVerifyPosition -gt $configFilesPosition) 'Preflight must inspect project, working_dir, and config_files before approving a container owner.'
 foreach ($containerName in @('makerseed-diagnostic-app-1', 'makerseed-diagnostic-db-1')) {
     Assert-Condition ($preflight -like "*$containerName*") "Preflight must inspect exact container ownership for $containerName"
 }

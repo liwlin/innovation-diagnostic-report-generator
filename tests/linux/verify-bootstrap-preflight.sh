@@ -125,13 +125,32 @@ case "$1 $2" in
     ;;
   "ps --filter")
     shift 2
+    if [ "${FAKE_PORT_OWNER:-none}" != "none" ]; then
+      echo "${FAKE_PORT_OWNER:-container-id}"
+    fi
     exit 0
     ;;
   "ps -a")
+    if [ "${FAKE_PROJECT_CONTAINER:-none}" != "none" ]; then
+      echo "${FAKE_PROJECT_CONTAINER:-container-id}"
+    fi
     exit 0
     ;;
   "inspect --format")
-    echo "makerseed-diagnostic"
+    case "$*" in
+      *'.Config.Labels'*'com.docker.compose.project.working_dir'*)
+        echo "${FAKE_OWNER_WORKING_DIR:-$PROJECT_ROOT}"
+        ;;
+      *'.Config.Labels'*'com.docker.compose.project.config_files'*)
+        echo "${FAKE_OWNER_CONFIG_FILES:-$PROJECT_ROOT/releases/$RELEASE_ID/deploy/compose.yaml}"
+        ;;
+      *'.Config.Labels'*'com.docker.compose.project'*)
+        echo "${FAKE_OWNER_PROJECT:-makerseed-diagnostic}"
+        ;;
+      *)
+        echo inspect-proof
+        ;;
+    esac
     ;;
   "pull "*|"load "*)
     echo "unexpected docker mutation: $*" >&2
@@ -198,9 +217,35 @@ run_preflight_bootstrap() {
   REPORT_ROOT_PHASE=isolated \
   FAKE_IMAGE_INSPECT=${FAKE_IMAGE_INSPECT:-pass} \
   FAKE_MANIFEST_INSPECT=${FAKE_MANIFEST_INSPECT:-fail} \
+  FAKE_PORT_OWNER=${FAKE_PORT_OWNER:-none} \
+  FAKE_PROJECT_CONTAINER=${FAKE_PROJECT_CONTAINER:-none} \
+  FAKE_OWNER_PROJECT=${FAKE_OWNER_PROJECT:-makerseed-diagnostic} \
+  FAKE_OWNER_WORKING_DIR=${FAKE_OWNER_WORKING_DIR:-$PROJECT_ROOT} \
+  FAKE_OWNER_CONFIG_FILES=${FAKE_OWNER_CONFIG_FILES:-$PROJECT_ROOT/releases/$RELEASE_ID/deploy/compose.yaml} \
   PATH="$FAKE_DOCKER_DIR:$PATH" \
   FAKE_DOCKER_LOG=$FAKE_DOCKER_LOG \
     "$PROJECT_DIR/deploy/scripts/preflight.sh"
+}
+
+assert_runtime_collision_owner_result() {
+  expected=$1
+  reason=$2
+  shift 2
+  set +e
+  (
+    for assignment in "$@"; do
+      export "$assignment"
+    done
+    run_preflight_runtime >/dev/null 2>&1
+  )
+  status=$?
+  set -e
+  case "$expected:$status" in
+    pass:0) ;;
+    fail:0) fail "$reason was accepted" ;;
+    fail:*) ;;
+    pass:*) fail "$reason was rejected" ;;
+  esac
 }
 
 run_preflight_bootstrap_with_tar() {
@@ -251,6 +296,11 @@ run_preflight_runtime() {
   APP_IMAGE=$APP_IMAGE \
   FAKE_IMAGE_INSPECT=${FAKE_IMAGE_INSPECT:-pass} \
   FAKE_MANIFEST_INSPECT=${FAKE_MANIFEST_INSPECT:-fail} \
+  FAKE_PORT_OWNER=${FAKE_PORT_OWNER:-none} \
+  FAKE_PROJECT_CONTAINER=${FAKE_PROJECT_CONTAINER:-none} \
+  FAKE_OWNER_PROJECT=${FAKE_OWNER_PROJECT:-makerseed-diagnostic} \
+  FAKE_OWNER_WORKING_DIR=${FAKE_OWNER_WORKING_DIR:-$PROJECT_ROOT} \
+  FAKE_OWNER_CONFIG_FILES=${FAKE_OWNER_CONFIG_FILES:-$PROJECT_ROOT/releases/$RELEASE_ID/deploy/compose.yaml} \
   PATH="$FAKE_DOCKER_DIR:$PATH" \
   FAKE_DOCKER_LOG=$FAKE_DOCKER_LOG \
     "$PROJECT_DIR/deploy/scripts/preflight.sh"
@@ -430,6 +480,86 @@ chmod 600 "$PROJECT_ROOT/secrets/session_secret"
 runtime_json=$(run_preflight_runtime)
 assert_contains "$runtime_json" '"mode":"runtime"'
 assert_contains "$runtime_json" '"binding_hash":"'
+legacy_release_id=v0.1.7
+legacy_release_root=$PROJECT_ROOT/releases/$legacy_release_id
+legacy_deploy_root=$legacy_release_root/deploy
+mkdir -p "$legacy_deploy_root"
+cp "$PROJECT_ROOT/releases/$RELEASE_ID/deploy/compose.yaml" "$legacy_deploy_root/compose.yaml"
+(
+  cd "$legacy_release_root"
+  sha256sum deploy/compose.yaml > release-tree.sha256
+)
+assert_runtime_collision_owner_result pass "legacy release-working-dir container with verified config" \
+  FAKE_PORT_OWNER=legacy-app \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+assert_runtime_collision_owner_result pass "stable project-root container with verified config" \
+  FAKE_PORT_OWNER=modern-app \
+  FAKE_OWNER_WORKING_DIR=$PROJECT_ROOT \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+assert_runtime_collision_owner_result fail "container from another Compose project" \
+  FAKE_PORT_OWNER=foreign-app \
+  FAKE_OWNER_PROJECT=other-project \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+assert_runtime_collision_owner_result fail "container with sibling-prefix working directory" \
+  FAKE_PORT_OWNER=sibling-app \
+  FAKE_OWNER_WORKING_DIR=$PROJECT_ROOT-evil/releases/$legacy_release_id/deploy \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+assert_runtime_collision_owner_result fail "container with missing config_files label" \
+  FAKE_PORT_OWNER=missing-config \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=
+assert_runtime_collision_owner_result fail "container with multiple config_files labels" \
+  FAKE_PORT_OWNER=multi-config \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml:$PROJECT_ROOT/releases/$RELEASE_ID/deploy/compose.yaml
+assert_runtime_collision_owner_result fail "container with unsafe release id in config_files" \
+  FAKE_PORT_OWNER=unsafe-release \
+  FAKE_OWNER_WORKING_DIR=$PROJECT_ROOT \
+  FAKE_OWNER_CONFIG_FILES=$PROJECT_ROOT/releases/../v0.1.7/deploy/compose.yaml
+rm "$legacy_release_root/release-tree.sha256"
+assert_runtime_collision_owner_result fail "container with missing release manifest" \
+  FAKE_PORT_OWNER=missing-manifest \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+(
+  cd "$legacy_release_root"
+  printf 'not-a-manifest\n' > release-tree.sha256
+)
+assert_runtime_collision_owner_result fail "container with malformed release manifest" \
+  FAKE_PORT_OWNER=malformed-manifest \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+(
+  cd "$legacy_release_root"
+  printf 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  deploy/compose.yaml\n' > release-tree.sha256
+)
+assert_runtime_collision_owner_result fail "container with mismatched config manifest hash" \
+  FAKE_PORT_OWNER=mismatched-manifest \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+(
+  cd "$legacy_release_root"
+  sha256sum deploy/compose.yaml > release-tree.sha256
+)
+rm "$legacy_deploy_root/compose.yaml"
+ln -s /tmp/foreign-compose.yaml "$legacy_deploy_root/compose.yaml"
+assert_runtime_collision_owner_result fail "container with symlinked config file" \
+  FAKE_PORT_OWNER=symlink-config \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+rm "$legacy_deploy_root/compose.yaml"
+assert_runtime_collision_owner_result fail "container with broken config file" \
+  FAKE_PORT_OWNER=broken-config \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+mkdir -p "$TMP_DIR/foreign-release/deploy"
+printf 'foreign\n' >"$TMP_DIR/foreign-release/deploy/compose.yaml"
+assert_runtime_collision_owner_result fail "container with foreign config path" \
+  FAKE_PORT_OWNER=foreign-config \
+  FAKE_OWNER_WORKING_DIR=$PROJECT_ROOT \
+  FAKE_OWNER_CONFIG_FILES=$TMP_DIR/foreign-release/deploy/compose.yaml
 printf 'drift\n' >"$PROJECT_ROOT/releases/$RELEASE_ID/deploy/drift.txt"
 if run_preflight_runtime >/dev/null 2>&1; then fail "runtime preflight accepted release tree drift"; fi
 rm "$PROJECT_ROOT/releases/$RELEASE_ID/deploy/drift.txt"

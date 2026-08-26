@@ -105,8 +105,9 @@ case "$1 $2" in
     case "$*" in
       *'.State.Health'*) echo healthy ;;
       *'.Config.Image'*) echo "$APP_IMAGE" ;;
-      *'.Config.Labels'*'com.docker.compose.project.working_dir'*) echo "$PROJECT_ROOT" ;;
-      *'.Config.Labels'*) echo makerseed-diagnostic ;;
+      *'.Config.Labels'*'com.docker.compose.project.working_dir'*) echo "${FAKE_OWNER_WORKING_DIR:-$PROJECT_ROOT}" ;;
+      *'.Config.Labels'*'com.docker.compose.project.config_files'*) echo "${FAKE_OWNER_CONFIG_FILES:-$RELEASE_ROOT/compose.yaml}" ;;
+      *'.Config.Labels'*) echo "${FAKE_OWNER_PROJECT:-makerseed-diagnostic}" ;;
       *) echo inspect-proof ;;
     esac
     ;;
@@ -428,6 +429,9 @@ run_deploy() {
   smoke_test_password_file=${RUN_SMOKE_TEST_PASSWORD_FILE:-$PROJECT_ROOT/secrets/smoke_test_password}
   fail_deploy_sha256=${RUN_FAIL_DEPLOY_SHA256:-}
   fail_deploy_mv=${RUN_FAIL_DEPLOY_MV:-}
+  fake_owner_project=${RUN_FAKE_OWNER_PROJECT:-makerseed-diagnostic}
+  fake_owner_working_dir=${RUN_FAKE_OWNER_WORKING_DIR:-$PROJECT_ROOT}
+  fake_owner_config_files=${RUN_FAKE_OWNER_CONFIG_FILES:-$RELEASE_ROOT/compose.yaml}
   rm -f "$PROJECT_ROOT/$PROJECT_MARKER"
   set +e
   BOOTSTRAP_ADMIN_USERNAME=first-admin \
@@ -452,6 +456,9 @@ run_deploy() {
   FAKE_EXPECTED_TEST_PASSWORD=$SMOKE_PASSWORD \
   FAKE_FAIL_DEPLOY_SHA256=$fail_deploy_sha256 \
   FAKE_FAIL_DEPLOY_MV=$fail_deploy_mv \
+  FAKE_OWNER_PROJECT=$fake_owner_project \
+  FAKE_OWNER_WORKING_DIR=$fake_owner_working_dir \
+  FAKE_OWNER_CONFIG_FILES=$fake_owner_config_files \
     "$PROJECT_DIR/deploy/scripts/deploy.sh"
   deploy_status=$?
   set -e
@@ -819,6 +826,17 @@ after_handoff_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.
 [ "$handoff_checksum_hash" = "$after_handoff_checksum_hash" ] || fail "stale handoff backup overwrote current.env.sha256"
 rm -f "$PROJECT_ROOT/deployment-state/current.env.before-handoff" "$PROJECT_ROOT/deployment-state/current.env.sha256.before-handoff"
 rm -f "$FAKE_STATE_DIR"/db-created "$FAKE_STATE_DIR"/app-started "$FAKE_STATE_DIR"/migrated "$FAKE_STATE_DIR"/bootstrapped
+
+write_install_passwords
+: >"$FAKE_DOCKER_LOG"
+RUN_FAKE_OWNER_WORKING_DIR=$RELEASE_ROOT RUN_FAKE_OWNER_CONFIG_FILES=$RELEASE_ROOT/compose.yaml run_deploy >/dev/null
+if grep -q 'bootstrap-admin' "$FAKE_DOCKER_LOG"; then
+  fail "legacy release-working-dir upgrade reran bootstrap-admin"
+fi
+if grep -q 'DoNotLeak' "$FAKE_DOCKER_LOG"; then
+  fail "password appeared in legacy release-working-dir upgrade fake Docker/curl argv log"
+fi
+(cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 is not valid after legacy release-working-dir upgrade"
 
 write_install_passwords
 : >"$FAKE_DOCKER_LOG"

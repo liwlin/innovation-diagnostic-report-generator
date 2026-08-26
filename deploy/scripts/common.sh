@@ -212,6 +212,80 @@ json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+verify_container_config_binding() {
+  owner_dir=$1
+  owner_config_files=$2
+  purpose=$3
+  case "$owner_config_files" in
+    ''|*","*|*":"*)
+      echo "ABORT: $purpose has unsafe Compose config_files ownership proof" >&2
+      exit 54
+      ;;
+  esac
+  if printf '%s' "$owner_config_files" | LC_ALL=C grep '[[:cntrl:]]' >/dev/null 2>&1; then
+    echo "ABORT: $purpose has unsafe Compose config_files ownership proof" >&2
+    exit 54
+  fi
+  case "$owner_config_files" in
+    "$PROJECT_ROOT"/releases/*/deploy/compose.yaml) ;;
+    *)
+      echo "ABORT: $purpose is owned by another Compose project/root" >&2
+      exit 54
+      ;;
+  esac
+  release_tail=${owner_config_files#"$PROJECT_ROOT"/releases/}
+  owner_release_id=${release_tail%/deploy/compose.yaml}
+  case "$owner_release_id" in
+    ''|*[!A-Za-z0-9._-]*|*/*|-*)
+      echo "ABORT: $purpose has unsafe Compose release ownership proof" >&2
+      exit 54
+      ;;
+  esac
+  owner_release_base=$PROJECT_ROOT/releases/$owner_release_id
+  owner_release_deploy=$owner_release_base/deploy
+  case "$owner_dir" in
+    "$PROJECT_ROOT"|"$owner_release_deploy") ;;
+    *)
+      echo "ABORT: $purpose is owned by another Compose project/root" >&2
+      exit 54
+      ;;
+  esac
+  [ -d "$owner_release_base" ] && [ ! -L "$owner_release_base" ] || { echo "ABORT: $purpose release ownership root is missing or unsafe" >&2; exit 54; }
+  [ -d "$owner_release_deploy" ] && [ ! -L "$owner_release_deploy" ] || { echo "ABORT: $purpose release deploy ownership root is missing or unsafe" >&2; exit 54; }
+  [ -f "$owner_config_files" ] && [ ! -L "$owner_config_files" ] || { echo "ABORT: $purpose Compose config file is missing or unsafe" >&2; exit 54; }
+  owner_release_real=$(safe_realpath "$owner_release_base")
+  owner_deploy_real=$(safe_realpath "$owner_release_deploy")
+  owner_config_real=$(safe_realpath "$owner_config_files")
+  [ "$owner_release_real" = "$owner_release_base" ] || { echo "ABORT: $purpose release ownership root resolves outside the project" >&2; exit 54; }
+  [ "$owner_deploy_real" = "$owner_release_deploy" ] || { echo "ABORT: $purpose release deploy ownership root resolves outside the project" >&2; exit 54; }
+  [ "$owner_config_real" = "$owner_release_deploy/compose.yaml" ] || { echo "ABORT: $purpose Compose config file resolves outside the release" >&2; exit 54; }
+  owner_manifest=$owner_release_base/release-tree.sha256
+  [ -f "$owner_manifest" ] && [ ! -L "$owner_manifest" ] || { echo "ABORT: $purpose release manifest is missing or unsafe" >&2; exit 54; }
+  compose_manifest_lines=$(awk 'index($0, "  ") == 65 && substr($0, 67) == "deploy/compose.yaml" { c++ } END { print c + 0 }' "$owner_manifest")
+  [ "$compose_manifest_lines" -eq 1 ] || { echo "ABORT: $purpose release manifest must bind exactly one deploy/compose.yaml" >&2; exit 54; }
+  compose_manifest_line=$(awk 'index($0, "  ") == 65 && substr($0, 67) == "deploy/compose.yaml" { print }' "$owner_manifest")
+  compose_manifest_hash=${compose_manifest_line%%  *}
+  if ! printf '%s\n' "$compose_manifest_hash" | grep -E '^[0-9a-f]{64}$' >/dev/null 2>&1; then
+    echo "ABORT: $purpose release manifest has malformed deploy/compose.yaml hash" >&2
+    exit 54
+  fi
+  actual_compose_hash=$(sha256sum "$owner_config_files" | awk '{print $1}')
+  [ "$actual_compose_hash" = "$compose_manifest_hash" ] || { echo "ABORT: $purpose Compose config hash does not match release manifest" >&2; exit 54; }
+}
+
+verify_container_owner() {
+  container_id=$1
+  purpose=$2
+  owner_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id" 2>/dev/null || true)
+  owner_dir=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$container_id" 2>/dev/null || true)
+  owner_config_files=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' "$container_id" 2>/dev/null || true)
+  if [ "$owner_project" != "makerseed-diagnostic" ]; then
+    echo "ABORT: $purpose is owned by another Compose project/root" >&2
+    exit 54
+  fi
+  verify_container_config_binding "$owner_dir" "$owner_config_files" "$purpose"
+}
+
 compose() {
-  docker-compose -p makerseed-diagnostic --env-file "$PROJECT_ROOT/.env" -f "$RELEASE_ROOT/compose.yaml" "$@"
+  docker-compose -p makerseed-diagnostic --project-directory "$PROJECT_ROOT" --env-file "$PROJECT_ROOT/.env" -f "$RELEASE_ROOT/compose.yaml" "$@"
 }

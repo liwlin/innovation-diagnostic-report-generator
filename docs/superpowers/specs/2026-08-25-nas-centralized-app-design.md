@@ -362,7 +362,7 @@ DSM 反向代理承担 TLS 终止和入口转发，因此不再增加 Nginx 容�
 2. 检查备份状态、磁盘空间、镜像 digest 和数据库兼容性。
 3. 自动生成升级前 PostgreSQL 备份。
 4. 拉取镜像；网络失败时使用经 SHA-256 校验的离线镜像包。
-5. 仅重建 `app` 容器；普通发布不升级 PostgreSQL 大版本。
+5. 仅重建 `app` 容器；普通发布不升级 PostgreSQL 大版本。所有 `docker-compose` 调用固定 `--project-directory /volume1/docker/makerseed-diagnostic`，因此新建或重建容器的 Compose ownership label 不随 release 目录变化。
 6. 等待健康检查，通过后执行登录、搜索、保存和报告生成冒烟测试。
 7. 成功后记录版本、操作者、时间和测试结果。
 
@@ -392,7 +392,7 @@ DSM 反向代理承担 TLS 终止和入口转发，因此不再增加 Nginx 容�
 - PostgreSQL 集成测试覆盖：迁移、索引搜索、版本快照、审计不可修改、永久删除墓碑和备份恢复。
 - API 集成测试覆盖：老师/管理员边界、409 冲突、导入预览确认和报告任务状态。
 - PDF/PNG 使用固定样例和渲染快照验证家长版/内部版分离及命名兼容。
-- Compose 静态检查覆盖端口、权限、挂载、资源限制、健康检查、镜像版本和禁止项。
+- Compose 静态检查覆盖端口、权限、挂载、资源限制、健康检查、镜像版本和禁止项。运行时 preflight 对已有容器的 Compose ownership 继续 fail-closed：project label 必须精确匹配，`working_dir` 只能是项目根或经验证的历史 release deploy 目录，`config_files` 必须是唯一、常规、非符号链接的 release `compose.yaml`，且受该 release 的 `release-tree.sha256` 绑定。
 
 ### 15.2 浏览器与 NAS 验证
 

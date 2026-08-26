@@ -97,17 +97,6 @@ common_host_checks() {
   fi
 }
 
-verify_container_owner() {
-  container_id=$1
-  purpose=$2
-  owner_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id" 2>/dev/null || true)
-  owner_dir=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$container_id" 2>/dev/null || true)
-  if [ "$owner_project" != "makerseed-diagnostic" ] || [ "$owner_dir" != "$PROJECT_ROOT" ]; then
-    echo "ABORT: $purpose is owned by another Compose project/root" >&2
-    exit 54
-  fi
-}
-
 collision_checks() {
   collision_result=clear
   port_owners=$(docker ps --filter publish=18081 --format '{{.ID}}')
