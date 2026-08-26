@@ -248,31 +248,31 @@ Record custom-format dump, atomic manifest, real disposable restore design, mont
 - Consumes: exact version/digest, project root, secrets, prior deployment state, and app health/API.
 - Produces: guarded installation, pre-update backup, migration, deployment state, automatic rollback, DSM proxy/ACL runbooks.
 
-- [ ] **Step 1: Extend failing script tests**
+- [x] **Step 1: Extend failing script tests**
 
 Require preflight collision checks, exact target check before directory creation, no broad recursive delete, previous version/digest persistence, pre-upgrade backup before migration, health timeout, authenticated smoke hook, rollback on failure, and removal of temporary bootstrap material.
 
-- [ ] **Step 2: Implement read-only preflight**
+- [x] **Step 2: Implement read-only preflight**
 
 `preflight.sh` verifies architecture `x86_64`, required Docker/Compose versions, exact parent path, sufficient disk/memory, target path state, unique Compose project/container/port, required images or import bundles, secret modes, and that all declared mounts resolve under approved roots. It outputs a machine-readable verdict and performs no writes.
 
-- [ ] **Step 3: Implement one-time isolated layout creation**
+- [x] **Step 3: Implement one-time isolated layout creation**
 
 `install-layout.sh` runs only after a successful preflight nonce, creates exact project subdirectories without following symlinks, applies UID/GID/modes, creates no shared folder or DSM account, and refuses any pre-existing unexpected file.
 
-- [ ] **Step 4: Implement versioned deployment and smoke**
+- [x] **Step 4: Implement versioned deployment and smoke**
 
 `deploy.sh` verifies image digest, saves current state, runs backup and disposable restore verification, migrates, recreates only `app`, waits for health, and calls `smoke.sh`. Smoke verifies health, unauthenticated 401, login with a temporary test account, CSRF rejection, authenticated session, create/search/update/trash/restore, and then removes test data through the application. Any failure invokes rollback.
 
-- [ ] **Step 5: Implement rollback**
+- [x] **Step 5: Implement rollback**
 
 Rollback restores the previous app image/digest and Compose release. If the deployment changed schema incompatibly, it stops app, restores the exact pre-upgrade dump into the project database through a separately confirmed path, then starts the prior app. The script refuses to act without a valid prior-state file and verified backup hash.
 
-- [ ] **Step 6: Document final DSM boundaries**
+- [x] **Step 6: Document final DSM boundaries**
 
 Reverse proxy runbook creates a new LAN-only HTTPS entry targeting `127.0.0.1:18081`; it does not modify QuickConnect. File Station runbook creates only the exact encrypted share `科创诊断报告`, grants the app service identity write, a dedicated teacher DSM group read-only, admin manage, and all others none. It explicitly requires the user's teacher DSM account list before adding members.
 
-- [ ] **Step 7: Run static script and Compose checks**
+- [x] **Step 7: Run static script and Compose checks**
 
 Run:
 
@@ -284,7 +284,7 @@ docker compose -f deploy/compose.yaml config --quiet
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit deploy/rollback automation**
+- [x] **Step 8: Commit deploy/rollback automation**
 
 Record exact-root guards, preflight non-mutation, backup-before-migration, health/smoke gate, and rollback constraints.
 
