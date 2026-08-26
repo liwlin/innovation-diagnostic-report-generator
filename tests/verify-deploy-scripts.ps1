@@ -115,8 +115,57 @@ Assert-Condition ($smoke -match '--data-binary\s+@') 'Smoke must send JSON bodie
 Assert-Condition ($smoke -match 'json_escape') 'Smoke must JSON-escape credential and user-provided values.'
 Assert-Condition ($smoke -match 'chmod 600') 'Smoke temp request bodies must be mode 0600.'
 
-$shell = 'C:\Users\lwl56\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\usr\bin\sh.exe'
-Assert-Condition (Test-Path -LiteralPath $shell) 'Git sh.exe is unavailable for script syntax checks.'
+$isWindowsHost = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows
+)
+
+function Test-ExecutableFile {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $item = Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue
+    if ($null -eq $item -or $item.PSIsContainer) { return $false }
+    if ($isWindowsHost) { return $item.Extension -ieq '.exe' }
+    return $true
+}
+
+function Resolve-PosixShell {
+    $pathShell = Get-Command sh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $pathShell -and (Test-ExecutableFile $pathShell.Source)) {
+        return (Get-Item -LiteralPath $pathShell.Source).FullName
+    }
+
+    if (-not $isWindowsHost) {
+        throw 'POSIX sh is unavailable for deployment script syntax checks.'
+    }
+
+    $candidateRoots = @(
+        $env:ProgramFiles,
+        ${env:ProgramFiles(x86)}
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    $candidates = @()
+    foreach ($root in $candidateRoots) {
+        $candidates += Join-Path $root 'Git\usr\bin\sh.exe'
+        $candidates += Join-Path $root 'Git\bin\sh.exe'
+    }
+    foreach ($profileRoot in @($env:USERPROFILE, $env:LOCALAPPDATA)) {
+        if (-not [string]::IsNullOrWhiteSpace($profileRoot)) {
+            $candidates += Join-Path $profileRoot '.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\usr\bin\sh.exe'
+            $candidates += Join-Path $profileRoot 'codex-runtimes\codex-primary-runtime\dependencies\native\git\usr\bin\sh.exe'
+        }
+    }
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if (Test-ExecutableFile $candidate) {
+            return (Get-Item -LiteralPath $candidate).FullName
+        }
+    }
+
+    throw 'Git sh.exe is unavailable for deployment script syntax checks.'
+}
+
+$shell = Resolve-PosixShell
 & $shell -n @($requiredScripts | ForEach-Object { Join-Path $projectRoot $_ })
 Assert-Condition ($LASTEXITCODE -eq 0) 'POSIX shell syntax check failed.'
 
