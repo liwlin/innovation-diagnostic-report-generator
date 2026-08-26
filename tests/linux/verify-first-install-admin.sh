@@ -10,6 +10,9 @@ RELEASE_ID=v0.1.0-first-admin-test
 PREFLIGHT_NONCE=nonce-first-admin
 RELEASE_ROOT=$PROJECT_ROOT/releases/$RELEASE_ID/deploy
 APP_IMAGE=ghcr.io/liwlin/innovation-diagnostic-report-generator@sha256:1111111111111111111111111111111111111111111111111111111111111111
+ROLLBACK_RELEASE_ID=v0.2.0-manual-rollback-test
+ROLLBACK_RELEASE_ROOT=$PROJECT_ROOT/releases/$ROLLBACK_RELEASE_ID/deploy
+ROLLBACK_APP_IMAGE=ghcr.io/liwlin/innovation-diagnostic-report-generator@sha256:2222222222222222222222222222222222222222222222222222222222222222
 ADMIN_PASSWORD='AdminSecret-DoNotLeak-2026!'
 SMOKE_PASSWORD='SmokeSecret-DoNotLeak-2026!'
 RUN_MARKER=task7-first-admin-$$
@@ -135,7 +138,10 @@ case "$command_name" in
   up)
     case "$service_name" in
       db) : >"$FAKE_STATE_DIR/db-created" ;;
-      app) : >"$FAKE_STATE_DIR/app-started" ;;
+      app)
+        : >"$FAKE_STATE_DIR/app-started"
+        printf 'APP_VERSION=%s\nAPP_IMAGE=%s\nRELEASE_ROOT=%s\n' "${APP_VERSION:-}" "${APP_IMAGE:-}" "${RELEASE_ROOT:-}" >"$FAKE_STATE_DIR/app-runtime"
+        ;;
     esac
     ;;
   exec)
@@ -260,6 +266,12 @@ fi
 if [ "${FAKE_FAIL_DEPLOY_MV:-}" = "final-hash" ] && [ "$#" -eq 2 ] && [ "${1##*/}" = "current.env.sha256" ] && [ "${2##*/}" = "current.env.sha256" ]; then
   exit 97
 fi
+if [ "${FAKE_FAIL_ROLLBACK_MV:-}" = "env" ] && [ "$#" -eq 2 ] && [ "${1##*/}" = ".env" ] && [ "$2" = "/volume1/docker/makerseed-diagnostic/.env" ]; then
+  exit 98
+fi
+if [ "${FAKE_FAIL_ROLLBACK_MV:-}" = "state-hash" ] && [ "$#" -eq 2 ] && [ "${1##*/}" = "current.env.sha256" ] && [ "$2" = "/volume1/docker/makerseed-diagnostic/deployment-state/current.env.sha256" ]; then
+  exit 99
+fi
 exec /usr/bin/mv "$@"
 EOF
   chmod 755 "$fake_dir/docker" "$fake_dir/docker-compose" "$fake_dir/curl" "$fake_dir/sha256sum" "$fake_dir/mv"
@@ -278,6 +290,18 @@ copy_release_fixture() {
   )
 }
 
+copy_rollback_release_fixture() {
+  mkdir -p "$PROJECT_ROOT/releases/$ROLLBACK_RELEASE_ID"
+  cp -R "$PROJECT_DIR/deploy/." "$ROLLBACK_RELEASE_ROOT/"
+  chmod +x "$ROLLBACK_RELEASE_ROOT"/scripts/*.sh "$ROLLBACK_RELEASE_ROOT"/postgres-init/10-create-runtime-role.sh
+  (
+    cd "$PROJECT_ROOT/releases/$ROLLBACK_RELEASE_ID"
+    find deploy -type f | LC_ALL=C sort | while IFS= read -r file; do
+      sha256sum "$file"
+    done > release-tree.sha256
+  )
+}
+
 prepare_project_root() {
   mkdir -p "$PROJECT_ROOT/data/postgres" "$PROJECT_ROOT/backups" "$PROJECT_ROOT/reports-staging" "$PROJECT_ROOT/secrets" "$PROJECT_ROOT/deployment-state"
   printf '%s\n' "$RUN_MARKER" >"$PROJECT_ROOT/$PROJECT_MARKER"
@@ -286,6 +310,7 @@ prepare_project_root() {
   cat >"$PROJECT_ROOT/.env" <<EOF
 APP_IMAGE=$APP_IMAGE
 APP_VERSION=$RELEASE_ID
+RELEASE_ID=$RELEASE_ID
 PROJECT_ROOT=$PROJECT_ROOT
 RELEASE_ROOT=$RELEASE_ROOT
 SECRETS_ROOT=$PROJECT_ROOT/secrets
@@ -340,6 +365,27 @@ run_deploy() {
   return "$deploy_status"
 }
 
+run_rollback() {
+  rollback_state_file=$1
+  fail_rollback_mv=${RUN_FAIL_ROLLBACK_MV:-}
+  set +e
+  SMOKE_ADMIN_USERNAME=first-admin \
+  SMOKE_ADMIN_PASSWORD_FILE=$PROJECT_ROOT/secrets/initial_admin_password \
+  SMOKE_TEST_PASSWORD_FILE=$PROJECT_ROOT/secrets/smoke_test_password \
+  PROJECT_ROOT=$PROJECT_ROOT \
+  PATH="$FAKE_DOCKER_DIR:$PATH" \
+  FAKE_DOCKER_LOG=$FAKE_DOCKER_LOG \
+  FAKE_STATE_DIR=$FAKE_STATE_DIR \
+  FAKE_EXPECTED_ADMIN_PASSWORD=$ADMIN_PASSWORD \
+  FAKE_EXPECTED_TEST_PASSWORD=$SMOKE_PASSWORD \
+  FAKE_FAIL_ROLLBACK_MV=$fail_rollback_mv \
+    "$PROJECT_DIR/deploy/scripts/rollback.sh" --state "$rollback_state_file"
+  rollback_status=$?
+  set -e
+  printf '%s\n' "$RUN_MARKER" >"$PROJECT_ROOT/$PROJECT_MARKER"
+  return "$rollback_status"
+}
+
 line_number() {
   pattern=$1
   grep -n "$pattern" "$FAKE_DOCKER_LOG" | sed -n '1s/:.*//p'
@@ -386,6 +432,90 @@ assert_no_upgrade_mutation_started() {
 restore_verified_current_state() {
   cp -p "$TMP_DIR/good-current.env" "$PROJECT_ROOT/deployment-state/current.env"
   cp -p "$TMP_DIR/good-current.env.sha256" "$PROJECT_ROOT/deployment-state/current.env.sha256"
+}
+
+require_line_once() {
+  file=$1
+  line=$2
+  count=$(grep -Fxc "$line" "$file" || true)
+  [ "$count" -eq 1 ] || fail "$file does not contain exactly one line: $line"
+}
+
+stage_manual_rollback_active_release() {
+  copy_rollback_release_fixture
+  active_db_image=$(sed -n 's/^DB_IMAGE=//p' "$PROJECT_ROOT/deployment-state/current.env")
+  active_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$PROJECT_ROOT/deployment-state/current.env")
+  active_backup_file=$(sed -n 's/^BACKUP_FILE=//p' "$PROJECT_ROOT/deployment-state/current.env")
+  active_schema_compatible=$(sed -n 's/^SCHEMA_COMPATIBLE=//p' "$PROJECT_ROOT/deployment-state/current.env")
+  active_handoff=$(sed -n 's/^INITIAL_ADMIN_HANDOFF=//p' "$PROJECT_ROOT/deployment-state/current.env")
+  cat >"$PROJECT_ROOT/.env" <<EOF
+APP_IMAGE=$ROLLBACK_APP_IMAGE
+APP_VERSION=$ROLLBACK_RELEASE_ID
+RELEASE_ID=$ROLLBACK_RELEASE_ID
+PROJECT_ROOT=$PROJECT_ROOT
+RELEASE_ROOT=$ROLLBACK_RELEASE_ROOT
+SECRETS_ROOT=$PROJECT_ROOT/secrets
+REPORT_ROOT=$PROJECT_ROOT/reports-staging
+REPORT_ROOT_PHASE=isolated
+EOF
+  cat >"$PROJECT_ROOT/deployment-state/current.env" <<EOF
+RELEASE_ROOT=$ROLLBACK_RELEASE_ROOT
+APP_IMAGE=$ROLLBACK_APP_IMAGE
+APP_VERSION=$ROLLBACK_RELEASE_ID
+DB_IMAGE=$active_db_image
+DB_CONTAINER_CONFIG_HASH=$active_db_config_hash
+SCHEMA_COMPATIBLE=$active_schema_compatible
+BACKUP_FILE=$active_backup_file
+PREVIOUS_RELEASE_ROOT=$RELEASE_ROOT
+PREVIOUS_APP_IMAGE=$APP_IMAGE
+PREVIOUS_APP_VERSION=$RELEASE_ID
+INITIAL_ADMIN_HANDOFF=$active_handoff
+EOF
+  chmod 600 "$PROJECT_ROOT/.env" "$PROJECT_ROOT/deployment-state/current.env"
+  (cd "$PROJECT_ROOT/deployment-state" && sha256sum current.env > current.env.sha256)
+  ln -sfn "$ROLLBACK_RELEASE_ROOT" "$PROJECT_ROOT/current"
+}
+
+assert_manual_rollback_committed() {
+  expected_db_image=$1
+  expected_db_config_hash=$2
+  require_line_once "$PROJECT_ROOT/.env" "APP_IMAGE=$APP_IMAGE"
+  require_line_once "$PROJECT_ROOT/.env" "APP_VERSION=$RELEASE_ID"
+  require_line_once "$PROJECT_ROOT/.env" "RELEASE_ID=$RELEASE_ID"
+  require_line_once "$PROJECT_ROOT/.env" "RELEASE_ROOT=$RELEASE_ROOT"
+  require_line_once "$PROJECT_ROOT/.env" "PROJECT_ROOT=$PROJECT_ROOT"
+  require_line_once "$PROJECT_ROOT/.env" "SECRETS_ROOT=$PROJECT_ROOT/secrets"
+  require_line_once "$PROJECT_ROOT/.env" "REPORT_ROOT=$PROJECT_ROOT/reports-staging"
+  require_line_once "$PROJECT_ROOT/.env" "REPORT_ROOT_PHASE=isolated"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "RELEASE_ROOT=$RELEASE_ROOT"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "APP_IMAGE=$APP_IMAGE"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "APP_VERSION=$RELEASE_ID"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "PREVIOUS_RELEASE_ROOT=$ROLLBACK_RELEASE_ROOT"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "PREVIOUS_APP_IMAGE=$ROLLBACK_APP_IMAGE"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "PREVIOUS_APP_VERSION=$ROLLBACK_RELEASE_ID"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "DB_IMAGE=$expected_db_image"
+  require_line_once "$PROJECT_ROOT/deployment-state/current.env" "DB_CONTAINER_CONFIG_HASH=$expected_db_config_hash"
+  (cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "manual rollback current.env.sha256 does not verify"
+  grep -q '  current.env$' "$PROJECT_ROOT/deployment-state/current.env.sha256" || fail "manual rollback current.env.sha256 does not name current.env"
+  [ "$(readlink "$PROJECT_ROOT/current")" = "$RELEASE_ROOT" ] || fail "manual rollback current symlink does not point to previous release"
+  require_line_once "$FAKE_STATE_DIR/app-runtime" "APP_VERSION=$RELEASE_ID"
+  require_line_once "$FAKE_STATE_DIR/app-runtime" "APP_IMAGE=$APP_IMAGE"
+  require_line_once "$FAKE_STATE_DIR/app-runtime" "RELEASE_ROOT=$RELEASE_ROOT"
+}
+
+assert_manual_rollback_failure_restored() {
+  expected_env_hash=$1
+  expected_state_hash=$2
+  expected_checksum_hash=$3
+  actual_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+  actual_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+  actual_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+  [ "$expected_env_hash" = "$actual_env_hash" ] || fail "manual rollback commit failure changed .env"
+  [ "$expected_state_hash" = "$actual_state_hash" ] || fail "manual rollback commit failure changed current.env"
+  [ "$expected_checksum_hash" = "$actual_checksum_hash" ] || fail "manual rollback commit failure changed current.env.sha256"
+  require_line_once "$FAKE_STATE_DIR/app-runtime" "APP_VERSION=$ROLLBACK_RELEASE_ID"
+  require_line_once "$FAKE_STATE_DIR/app-runtime" "APP_IMAGE=$ROLLBACK_APP_IMAGE"
+  require_line_once "$FAKE_STATE_DIR/app-runtime" "RELEASE_ROOT=$ROLLBACK_RELEASE_ROOT"
 }
 
 assert_upgrade_rejects_bad_current_hash() {
@@ -495,6 +625,71 @@ restore_verified_current_state
 printf 'not-a-checksum\n' >>"$PROJECT_ROOT/deployment-state/current.env.sha256"
 assert_upgrade_rejects_bad_current_hash "malformed-extra-line"
 restore_verified_current_state
+
+stage_manual_rollback_active_release
+manual_db_image=$(sed -n 's/^DB_IMAGE=//p' "$PROJECT_ROOT/deployment-state/current.env")
+manual_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$PROJECT_ROOT/deployment-state/current.env")
+write_install_passwords
+: >"$FAKE_DOCKER_LOG"
+run_rollback "$PROJECT_ROOT/deployment-state/current.env" >/dev/null
+assert_manual_rollback_committed "$manual_db_image" "$manual_db_config_hash"
+
+cat >"$PROJECT_ROOT/deployment-state/pending.env" <<EOF
+RELEASE_ROOT=$ROLLBACK_RELEASE_ROOT
+APP_IMAGE=$ROLLBACK_APP_IMAGE
+APP_VERSION=$ROLLBACK_RELEASE_ID
+DB_IMAGE=$manual_db_image
+DB_CONTAINER_CONFIG_HASH=$manual_db_config_hash
+SCHEMA_COMPATIBLE=true
+BACKUP_FILE=
+PREVIOUS_RELEASE_ROOT=$RELEASE_ROOT
+PREVIOUS_APP_IMAGE=$APP_IMAGE
+PREVIOUS_APP_VERSION=$RELEASE_ID
+INITIAL_ADMIN_HANDOFF=pending
+EOF
+chmod 600 "$PROJECT_ROOT/deployment-state/pending.env"
+(cd "$PROJECT_ROOT/deployment-state" && sha256sum pending.env > pending.env.sha256)
+before_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+write_install_passwords
+: >"$FAKE_DOCKER_LOG"
+run_rollback "$PROJECT_ROOT/deployment-state/pending.env" >/dev/null
+after_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+after_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+after_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+[ "$before_env_hash" = "$after_env_hash" ] || fail "automatic pending rollback rewrote .env"
+[ "$before_state_hash" = "$after_state_hash" ] || fail "automatic pending rollback rewrote current.env"
+[ "$before_checksum_hash" = "$after_checksum_hash" ] || fail "automatic pending rollback rewrote current.env.sha256"
+rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
+
+stage_manual_rollback_active_release
+before_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+write_install_passwords
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_ROLLBACK_MV=env run_rollback "$PROJECT_ROOT/deployment-state/current.env" >/dev/null 2>&1; then
+  fail "manual rollback .env commit failure reported success"
+fi
+assert_manual_rollback_failure_restored "$before_env_hash" "$before_state_hash" "$before_checksum_hash"
+rm -f "$PROJECT_ROOT/deployment-state/current.env.before-manual-rollback" \
+  "$PROJECT_ROOT/deployment-state/current.env.sha256.before-manual-rollback" \
+  "$PROJECT_ROOT/.env.before-manual-rollback"
+
+stage_manual_rollback_active_release
+before_env_hash=$(sha256sum "$PROJECT_ROOT/.env" | awk '{print $1}')
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+write_install_passwords
+: >"$FAKE_DOCKER_LOG"
+if RUN_FAIL_ROLLBACK_MV=state-hash run_rollback "$PROJECT_ROOT/deployment-state/current.env" >/dev/null 2>&1; then
+  fail "manual rollback state checksum commit failure reported success"
+fi
+assert_manual_rollback_failure_restored "$before_env_hash" "$before_state_hash" "$before_checksum_hash"
+rm -f "$PROJECT_ROOT/deployment-state/current.env.before-manual-rollback" \
+  "$PROJECT_ROOT/deployment-state/current.env.sha256.before-manual-rollback" \
+  "$PROJECT_ROOT/.env.before-manual-rollback"
 
 write_install_passwords
 before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')

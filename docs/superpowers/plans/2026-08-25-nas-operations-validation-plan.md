@@ -266,7 +266,7 @@ Require preflight collision checks, exact target check before directory creation
 
 - [x] **Step 5: Implement rollback**
 
-Rollback restores the previous app image/digest and Compose release. If the deployment changed schema incompatibly, it stops app, restores the exact pre-upgrade dump into the project database through a separately confirmed path, then starts the prior app. The script refuses to act without a valid prior-state file and verified backup hash.
+Rollback distinguishes manual rollback from deploy-failure rollback by the exact state file. Manual rollback with `deployment-state/current.env` verifies `.env`, `current.env`, and canonical `current.env.sha256` agree before Docker mutation, starts and smokes the prior app, then atomically rewrites `.env`, `current.env`, and `current.env.sha256` so monthly tasks and the next deploy source the rolled-back release. Automatic rollback with `pending.env` preserves deploy-owned state recovery. If the deployment changed schema incompatibly, rollback stops app, restores the exact pre-upgrade dump into the project database through a separately confirmed path, then starts the prior app.
 
 - [x] **Step 6: Document final DSM boundaries**
 
@@ -408,7 +408,7 @@ Queue a generation, restart only the app, and prove recovery. Run `backup.sh`, v
 
 - [ ] **Step 9: Prove update and rollback**
 
-Deploy a distinct signed test build or previous verified version, observe pre-update backup, health/smoke gate, and version change, then run rollback and verify prior version/data. PostgreSQL remains running through ordinary app rollback.
+Deploy a distinct signed test build or previous verified version, observe pre-update backup, health/smoke gate, and version change, then run manual rollback from exact `deployment-state/current.env` and verify prior version/data, `.env`, canonical `current.env.sha256`, `deployment-state/current.env`, and `current` symlink are coherent. PostgreSQL remains running through ordinary app rollback, and deploy-failure rollback from `pending.env` remains deploy-state-owned.
 
 - [ ] **Step 10: Configure final DSM surfaces only after isolation passes**
 

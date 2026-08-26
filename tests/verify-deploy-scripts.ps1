@@ -208,12 +208,30 @@ Assert-Condition ($deploy -match '\[ -e "\$child" \] \|\| \[ -L "\$child" \]') '
 Assert-Condition ($deploy -match 'refusing first install over existing database evidence') 'Deploy must require an audited baseline instead of reconciling existing DB evidence.'
 
 $rollback = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/rollback.sh') -Raw -Encoding UTF8
+$manualStatePosition = $rollback.IndexOf('manual_state=1')
+$rollbackSmokePosition = $rollback.IndexOf('"$SCRIPT_DIR/smoke.sh"')
+$manualStagePosition = $rollback.IndexOf('manual_stage_dir=$(mktemp -d "$state_dir/.manual-rollback-stage.XXXXXX")')
+$manualPublishedHashCheckPosition = $rollback.LastIndexOf('(cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)')
+$rollbackSymlinkPosition = $rollback.IndexOf('ln -sfn "$previous_release" "$PROJECT_ROOT/current"')
 Assert-Condition ($rollback -match 'deployment-state') 'Rollback does not require recorded deployment state.'
 Assert-Condition ($rollback -match 'sha256sum') 'Rollback does not verify its state or backup proof.'
 Assert-Condition ($rollback -match 'CONFIRM_INCOMPATIBLE_SCHEMA_RESTORE') 'Rollback must require a separate confirmation for incompatible-schema database restore.'
 Assert-Condition ($rollback -match 'restore-verify\.sh') 'Rollback must verify the backup before any incompatible-schema database restore.'
 Assert-Condition ($rollback -match 'pg_restore') 'Rollback must implement the confirmed incompatible-schema restore path.'
 Assert-Condition ($rollback -match 'compose stop app') 'Rollback must stop app before an incompatible-schema database restore.'
+Assert-Condition ($rollback -match 'if \[ "\$resolved_state" = "\$current_state" \]') 'Rollback must distinguish exact current.env manual rollback from pending automatic rollback.'
+Assert-Condition ($rollback -match 'require_regular_state_file "\$project_env" "\.env"') 'Manual rollback must require .env to be a regular non-symlink file before Docker mutation.'
+Assert-Condition ($rollback -match 'require_canonical_current_env_sha256 "\$current_state\.sha256"') 'Manual rollback must require canonical current.env.sha256 syntax.'
+Assert-Condition ($rollback -match 'read_required_single_field "\$project_env" RELEASE_ID') 'Manual rollback must require active RELEASE_ID in .env.'
+Assert-Condition ($rollback -match '\.env and current deployment state disagree') 'Manual rollback must require .env and current.env active fields to agree before mutation.'
+Assert-Condition ($rollback -match 'validate_release_tuple "\$previous_release" "\$previous_image" "\$previous_version" "\$previous_release_id"') 'Rollback must validate previous release path, id, digest, and version.'
+Assert-Condition ($manualStatePosition -ge 0 -and $manualStatePosition -lt $rollbackSmokePosition) 'Rollback must classify manual rollback before smoke/app mutation.'
+Assert-Condition ($manualStagePosition -gt $rollbackSmokePosition) 'Manual rollback must stage operator state only after prior app health and smoke succeed.'
+Assert-Condition ($rollback -match 'manual_commit_started=0' -and $rollback -match 'manual_commit_complete=0') 'Manual rollback must guard multi-file operator-state commit.'
+Assert-Condition ($rollback -match '\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.before-manual-rollback' -and $rollback -match 'current\.env\.sha256\.before-manual-rollback') 'Manual rollback must use exact reserved backups for .env and current state/hash.'
+Assert-Condition ($rollback -match 'restore_manual_active_app\(\)') 'Manual rollback failure must attempt to restore the formerly active app.'
+Assert-Condition ($manualPublishedHashCheckPosition -gt $manualStagePosition -and $manualPublishedHashCheckPosition -lt $rollbackSymlinkPosition) 'Manual rollback must verify published current.env.sha256 before switching current symlink.'
+Assert-Condition ($rollback -notmatch 'rm -f "\$resolved_state"') 'Automatic pending rollback must not remove or rewrite deployment state owned by deploy.sh.'
 
 $smoke = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/smoke.sh') -Raw -Encoding UTF8
 foreach ($token in @('/api/health', '/api/session', '/api/auth/login', '/api/admin/users', '/api/batches', '/evaluations', 'X-CSRF-Token', '/trash', '/restore')) {
