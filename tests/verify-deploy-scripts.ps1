@@ -124,6 +124,8 @@ Assert-Condition ($layout -match 'project root exists before bootstrap layout') 
 Assert-Condition ($layout -notmatch '(synoshare|synouser|synogroup)') 'Install layout must not create DSM shares, users, or groups.'
 
 $deploy = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/deploy.sh') -Raw -Encoding UTF8
+$previousStateReadPosition = $deploy.IndexOf('sed -n ''s/^RELEASE_ROOT=//p'' "$previous_state"')
+$previousStateHashCheckPosition = $deploy.IndexOf('sha256sum -c current.env.sha256')
 $backupPosition = $deploy.IndexOf('backup.sh')
 $verifyPosition = $deploy.IndexOf('restore-verify.sh')
 $migratePosition = $deploy.IndexOf('migrate.sh')
@@ -131,8 +133,12 @@ $appUpPosition = $deploy.IndexOf('compose up -d --no-deps --force-recreate app')
 $dbUpPosition = $deploy.IndexOf('compose up -d db')
 $smokePosition = $deploy.IndexOf('smoke.sh')
 $bootstrapPosition = $deploy.IndexOf('bootstrap-admin')
+$smokePasswordDeletePosition = $deploy.IndexOf('rm -f "$SMOKE_TEST_PASSWORD_FILE"')
+$publishedHashCheckPosition = $deploy.LastIndexOf('(cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)')
 $smokeTestExactValidationPosition = $deploy.IndexOf('require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"')
 $pendingStateWritePosition = $deploy.IndexOf('>"$pending_state"')
+Assert-Condition ($previousStateHashCheckPosition -ge 0 -and $previousStateHashCheckPosition -lt $previousStateReadPosition) 'Deploy must verify current.env.sha256 before reading any previous deployment fields.'
+Assert-Condition ($deploy -match '\[ -f "\$previous_state\.sha256" \] && \[ ! -L "\$previous_state\.sha256" \]') 'Deploy must require current.env.sha256 to be a regular non-symlink file before upgrade.'
 Assert-Condition ($backupPosition -ge 0 -and $backupPosition -lt $migratePosition) 'Deploy must back up before migration.'
 Assert-Condition ($verifyPosition -gt $backupPosition -and $verifyPosition -lt $migratePosition) 'Deploy must restore-verify before migration.'
 Assert-Condition ($appUpPosition -gt $migratePosition) 'Deploy must start only the app after migration.'
@@ -158,6 +164,7 @@ Assert-Condition ($deploy -match 'SMOKE_TEST_PASSWORD_FILE') 'Deploy must read s
 Assert-Condition ($deploy -match 'SMOKE_ADMIN_PASSWORD_FILE=.*INITIAL_ADMIN_PASSWORD_FILE') 'First install must pass the initial admin password file to smoke without reading it.'
 Assert-Condition ($deploy -match 'INITIAL_ADMIN_HANDOFF=pending') 'Deploy state must record pending initial admin handoff without credential material.'
 Assert-Condition ($deploy -match 'rm -f "\$SMOKE_TEST_PASSWORD_FILE"') 'Deploy must remove only the exact temporary smoke-test password file after successful smoke.'
+Assert-Condition ($smokePasswordDeletePosition -gt $publishedHashCheckPosition) 'Deploy must remove the temporary smoke-test password only after current.env/current.env.sha256 are published and verified.'
 Assert-Condition ($deploy -notmatch 'rm -f "\$INITIAL_ADMIN_PASSWORD_FILE"') 'Deploy must not remove the preserved initial admin password automatically.'
 Assert-Condition ($deploy -match 'final_stage_dir=\$\(mktemp -d "\$state_dir/\.current-env-stage\.XXXXXX"\)') 'Deploy must stage final state/checksum in an isolated nonce-bound directory before publishing.'
 Assert-Condition ($deploy -match 'cp -p "\$pending_state" "\$final_stage_dir/current\.env"') 'Deploy must pre-stage final current.env content from pending state.'

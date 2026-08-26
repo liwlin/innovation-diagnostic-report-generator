@@ -47,6 +47,13 @@ if [ -e "$previous_state" ] || [ -L "$previous_state" ]; then
     echo "ABORT: current.env exists but is not a regular non-symlink file; capture an audited baseline before deployment" >&2
     exit 81
   fi
+  if [ -f "$previous_state.sha256" ] && [ ! -L "$previous_state.sha256" ]; then
+    :
+  else
+    echo "ABORT: current.env.sha256 is missing or not a regular non-symlink file; capture an audited baseline before deployment" >&2
+    exit 81
+  fi
+  (cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)
   previous_exists=1
   previous_release=$(sed -n 's/^RELEASE_ROOT=//p' "$previous_state")
   previous_image=$(sed -n 's/^APP_IMAGE=//p' "$previous_state")
@@ -259,7 +266,6 @@ SMOKE_ADMIN_PASSWORD_FILE=$SMOKE_ADMIN_PASSWORD_FILE \
 SMOKE_TEST_PASSWORD_FILE=$SMOKE_TEST_PASSWORD_FILE \
   "$SCRIPT_DIR/smoke.sh"
 
-rm -f "$SMOKE_TEST_PASSWORD_FILE"
 final_stage_dir=$(mktemp -d "$state_dir/.current-env-stage.XXXXXX")
 cp -p "$pending_state" "$final_stage_dir/current.env"
 (
@@ -283,6 +289,7 @@ mv "$final_stage_dir/current.env" "$previous_state"
 mv "$final_stage_dir/current.env.sha256" "$previous_state.sha256"
 (cd "$state_dir" && sha256sum -c current.env.sha256 >/dev/null)
 commit_complete=1
+rm -f "$SMOKE_TEST_PASSWORD_FILE"
 rm -f "$pending_state" "$pending_state.sha256" "$commit_state_backup" "$commit_hash_backup"
 rmdir "$final_stage_dir"
 final_stage_dir=''

@@ -364,6 +364,43 @@ assert_current_state_unchanged() {
   (cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 no longer verifies after failed final-state commit"
 }
 
+assert_smoke_password_unchanged() {
+  expected_hash=$1
+  [ -f "$PROJECT_ROOT/secrets/smoke_test_password" ] || fail "smoke password was removed before final deployment state was verified"
+  actual_hash=$(sha256sum "$PROJECT_ROOT/secrets/smoke_test_password" | awk '{print $1}')
+  [ "$expected_hash" = "$actual_hash" ] || fail "smoke password changed before final deployment state was verified"
+}
+
+assert_no_upgrade_mutation_started() {
+  if grep -q 'pg_dump' "$FAKE_DOCKER_LOG"; then
+    fail "unsafe previous deployment checksum was accepted before backup"
+  fi
+  if grep -q 'alembic -c /opt/app/server/alembic.ini upgrade head' "$FAKE_DOCKER_LOG"; then
+    fail "unsafe previous deployment checksum was accepted before migration"
+  fi
+  if grep -q 'docker-compose .* up .* app' "$FAKE_DOCKER_LOG"; then
+    fail "unsafe previous deployment checksum was accepted before app startup"
+  fi
+}
+
+restore_verified_current_state() {
+  cp -p "$TMP_DIR/good-current.env" "$PROJECT_ROOT/deployment-state/current.env"
+  cp -p "$TMP_DIR/good-current.env.sha256" "$PROJECT_ROOT/deployment-state/current.env.sha256"
+}
+
+assert_upgrade_rejects_bad_current_hash() {
+  reason=$1
+  before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+  : >"$FAKE_DOCKER_LOG"
+  if run_deploy >/dev/null 2>&1; then
+    fail "$reason current.env.sha256 was accepted"
+  fi
+  after_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+  [ "$before_state_hash" = "$after_state_hash" ] || fail "$reason current.env.sha256 failure changed current.env"
+  assert_no_upgrade_mutation_started
+  rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
+}
+
 [ "$(uname -s)" = "Linux" ] || fail "Linux test must run on Linux"
 assert_ephemeral_runner
 
@@ -427,25 +464,45 @@ if grep -q 'DoNotLeak' "$FAKE_DOCKER_LOG"; then
 fi
 (cd "$PROJECT_ROOT/deployment-state" && sha256sum -c current.env.sha256 >/dev/null) || fail "current.env.sha256 is not valid after upgrade"
 grep -q '  current.env$' "$PROJECT_ROOT/deployment-state/current.env.sha256" || fail "current.env.sha256 does not record current.env after upgrade"
+cp -p "$PROJECT_ROOT/deployment-state/current.env" "$TMP_DIR/good-current.env"
+cp -p "$PROJECT_ROOT/deployment-state/current.env.sha256" "$TMP_DIR/good-current.env.sha256"
+
+rm -f "$PROJECT_ROOT/deployment-state/current.env.sha256"
+assert_upgrade_rejects_bad_current_hash "missing"
+restore_verified_current_state
+
+rm -f "$PROJECT_ROOT/deployment-state/current.env.sha256"
+ln -s current.env.sha256.good "$PROJECT_ROOT/deployment-state/current.env.sha256"
+assert_upgrade_rejects_bad_current_hash "symlinked"
+rm -f "$PROJECT_ROOT/deployment-state/current.env.sha256"
+restore_verified_current_state
+
+printf '0000000000000000000000000000000000000000000000000000000000000000  current.env\n' >"$PROJECT_ROOT/deployment-state/current.env.sha256"
+assert_upgrade_rejects_bad_current_hash "mismatched"
+restore_verified_current_state
 
 write_install_passwords
 before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
 before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+before_smoke_hash=$(sha256sum "$PROJECT_ROOT/secrets/smoke_test_password" | awk '{print $1}')
 : >"$FAKE_DOCKER_LOG"
 if RUN_FAIL_DEPLOY_SHA256=final-stage run_deploy >/dev/null 2>&1; then
   fail "final checksum staging failure reported deploy success"
 fi
 assert_current_state_unchanged "$before_state_hash" "$before_checksum_hash"
+assert_smoke_password_unchanged "$before_smoke_hash"
 rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
 
 write_install_passwords
 before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
 before_checksum_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env.sha256" | awk '{print $1}')
+before_smoke_hash=$(sha256sum "$PROJECT_ROOT/secrets/smoke_test_password" | awk '{print $1}')
 : >"$FAKE_DOCKER_LOG"
 if RUN_FAIL_DEPLOY_MV=final-hash run_deploy >/dev/null 2>&1; then
   fail "final checksum rename failure reported deploy success"
 fi
 assert_current_state_unchanged "$before_state_hash" "$before_checksum_hash"
+assert_smoke_password_unchanged "$before_smoke_hash"
 rm -f "$PROJECT_ROOT/deployment-state/pending.env" "$PROJECT_ROOT/deployment-state/pending.env.sha256"
 
 write_install_passwords
@@ -492,6 +549,7 @@ mkdir -p "$FAKE_STATE_DIR"
 rm -f "$FAKE_STATE_DIR"/db-created "$FAKE_STATE_DIR"/app-started "$FAKE_STATE_DIR"/migrated "$FAKE_STATE_DIR"/bootstrapped
 prepare_project_root
 write_install_passwords
+before_smoke_hash=$(sha256sum "$PROJECT_ROOT/secrets/smoke_test_password" | awk '{print $1}')
 : >"$FAKE_DOCKER_LOG"
 if RUN_FAIL_DEPLOY_MV=final-hash run_deploy >/dev/null 2>&1; then
   fail "first-install final checksum rename failure reported deploy success"
@@ -499,5 +557,6 @@ fi
 [ ! -e "$PROJECT_ROOT/deployment-state/current.env" ] || fail "first-install final checksum rename failure left partial current.env"
 [ ! -e "$PROJECT_ROOT/deployment-state/current.env.sha256" ] || fail "first-install final checksum rename failure left partial current.env.sha256"
 [ ! -e "$PROJECT_ROOT/current" ] && [ ! -L "$PROJECT_ROOT/current" ] || fail "first-install final checksum rename failure published current release"
+assert_smoke_password_unchanged "$before_smoke_hash"
 
 echo "PASS: first-install admin bootstrap and smoke credential behavior verified."
