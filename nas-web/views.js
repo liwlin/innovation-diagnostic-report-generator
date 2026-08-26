@@ -48,6 +48,10 @@
     return ['mkseed_diag_aicfg_v1', 'mkseed_nas_ui_v1'];
   }
 
+  function generationStatusLabel(status) {
+    return ({ queued: '等待生成', running: '生成中', completed: '已生成', failed: '生成失败' })[status] || '未生成';
+  }
+
   function icon(name) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
@@ -155,7 +159,7 @@
       element('td', {}, record.grade || '—'),
       element('td', {}, record.recommended_class || '—'),
       element('td', {}, `${record.updated_by.display_name} · ${String(record.updated_at).replace('T', ' ').slice(0, 16)}`),
-      element('td', {}, record.generation_status || '未生成'),
+      element('td', {}, generationStatusLabel(record.generation_status)),
       element(
         'td',
         { className: 'row-actions' },
@@ -228,6 +232,10 @@
     );
   }
 
+  function confirmationDialog({ title, message, confirmLabel, danger, onCancel, onConfirm }) {
+    return element('div', { className: 'dialog-backdrop' }, element('section', { className: 'dialog', role: 'dialog', 'aria-modal': 'true' }, element('h2', {}, title), element('p', {}, message), element('div', { className: 'dialog-actions' }, element('button', { className: 'secondary-button', type: 'button', onClick: onCancel }, '取消'), element('button', { className: `primary-button${danger ? ' danger-button' : ''}`, type: 'button', onClick: onConfirm }, confirmLabel))));
+  }
+
   function userWorkspace({ users, error, importPreview, importMessage, onCreate, onToggle, onReset, onPreviewImport, onConfirmImport }) {
     const username = element('input', { className: 'control', placeholder: '账号', required: 'required' });
     const displayName = element('input', { className: 'control', placeholder: '显示名', required: 'required' });
@@ -267,5 +275,5 @@
     return element('section', {}, element('div', { className: 'toolbar audit-toolbar' }, actionInput), error ? element('p', { className: 'error-message' }, error) : null, element('div', { className: 'table-frame' }, element('table', { className: 'record-table' }, element('thead', {}, element('tr', {}, ...['时间', '操作者', '动作', '目标类型', '目标 ID', '标签'].map((label) => element('th', { scope: 'col' }, label)))), element('tbody', {}, rows)), loading ? element('div', { className: 'status-line' }, '正在加载审计…') : null));
   }
 
-  return Object.freeze({ auditWorkspace, element, loginView, nasLogoutStorageKeys, navigationItems, newRecordDialog, passwordResetDialog, permanentDeleteDialog, recordWorkspace, replace, shell, userWorkspace, validatePermanentDelete });
+  return Object.freeze({ auditWorkspace, confirmationDialog, element, generationStatusLabel, loginView, nasLogoutStorageKeys, navigationItems, newRecordDialog, passwordResetDialog, permanentDeleteDialog, recordWorkspace, replace, shell, userWorkspace, validatePermanentDelete });
 });

@@ -41,3 +41,9 @@ test('NAS logout cleanup never removes the Pages business workspace key', () => 
   ]);
   assert.equal(views.nasLogoutStorageKeys().includes('mkseed_diag_v3'), false);
 });
+
+test('generation states use teacher-facing Chinese labels', () => {
+  assert.equal(views.generationStatusLabel('completed'), '已生成');
+  assert.equal(views.generationStatusLabel('running'), '生成中');
+  assert.equal(views.generationStatusLabel(null), '未生成');
+});

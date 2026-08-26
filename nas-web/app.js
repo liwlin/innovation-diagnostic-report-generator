@@ -53,7 +53,7 @@
       onFilter(filters) { state.filters = filters; clearTimeout(state.filterTimer); state.filterTimer = setTimeout(() => loadRecords(trashed), 250); },
       onNew: showNewRecord,
       onEdit(record) { window.location.assign(`/editor?evaluation_id=${encodeURIComponent(record.evaluation_id)}`); },
-      async onTrash(record) { if (window.confirm(`将“${record.student_name}”移入回收站？`)) { await api.trashEvaluation(record.evaluation_id); await loadRecords(false); } },
+      onTrash: showTrashConfirm,
       async onRestore(record) { await api.restoreEvaluation(record.evaluation_id); await loadRecords(true); },
       onPermanentDelete: showPermanentDelete,
       async onReports(record) { const items = await api.listGenerations(record.evaluation_id); window.alert(items.length ? `共有 ${items.length} 次生成记录，请进入编辑页下载。` : '尚未生成报告。'); },
@@ -118,6 +118,16 @@
       }
     }
     dialog = views.permanentDeleteDialog({ record, error: '', onCancel: () => dialog.remove(), onConfirm: confirmDelete });
+    document.body.append(dialog);
+  }
+
+  function showTrashConfirm(record) {
+    let dialog;
+    async function confirmTrash() {
+      try { await api.trashEvaluation(record.evaluation_id); dialog.remove(); await loadRecords(false); }
+      catch (error) { dialog.remove(); state.error = error.message; renderRecords(false); }
+    }
+    dialog = views.confirmationDialog({ title: '移入回收站', message: `将“${record.student_name}”移入回收站？老师和管理员之后仍可恢复。`, confirmLabel: '移入回收站', danger: true, onCancel: () => dialog.remove(), onConfirm: confirmTrash });
     document.body.append(dialog);
   }
 

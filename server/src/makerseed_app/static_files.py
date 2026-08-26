@@ -51,6 +51,7 @@ def register_static_routes(app: FastAPI, settings: Settings) -> None:
 
     app.mount("/assets", StaticFiles(directory=static_root / "assets"), name="assets")
     app.mount("/shared", StaticFiles(directory=static_root / "shared"), name="shared")
+    app.mount("/vendor", StaticFiles(directory=static_root / "vendor"), name="vendor")
     app.mount("/nas-static", StaticFiles(directory=nas_web_root), name="nas-static")
 
     @app.get("/", include_in_schema=False)

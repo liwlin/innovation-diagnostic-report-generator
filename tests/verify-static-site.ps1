@@ -47,6 +47,8 @@ try {
         '/科创方向诊断报告生成器.dc.html',
         '/support.js',
         '/doc-page.js',
+        '/vendor/react.production.min.js',
+        '/vendor/react-dom.production.min.js',
         '/shared/report-filename.js',
         '/shared/runtime-config.js',
         '/shared/editor-repository.js',

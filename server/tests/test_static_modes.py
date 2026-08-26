@@ -46,6 +46,8 @@ def test_explicit_static_paths_work_without_directory_listing(client):
     for path in (
         "/support.js",
         "/doc-page.js",
+        "/vendor/react.production.min.js",
+        "/vendor/react-dom.production.min.js",
         "/assets/logo-lockup.png",
         "/shared/runtime-config.js",
         "/nas-static/app.css",

@@ -389,27 +389,27 @@ Record no-secret export, non-mutating preview, hash idempotence, conflict counts
 - Consumes: running test app, seeded teacher/admin users, test database, and Browser tooling.
 - Produces: screenshots, console/network verdicts, two-user conflict evidence, and Pages/NAS mode separation evidence.
 
-- [ ] **Step 1: Start the isolated test server**
+- [x] **Step 1: Start the isolated test server**
 
 Use a temporary SQLite file and temporary report root. Bind only `127.0.0.1` on a dynamically checked free port. Seed one admin, two teachers, two batches, and named evaluations with fixture data.
 
-- [ ] **Step 2: Verify teacher workflow in a real browser**
+- [x] **Step 2: Verify teacher workflow in a real browser**
 
 Log in, search `张`, edit a record created by the other teacher, wait for visible `已保存`, reload, generate reports, view history, download a fixture file, move to recycle bin, restore, and log out. Assert no relevant console errors or failed same-origin API requests.
 
-- [ ] **Step 3: Verify two-browser conflict behavior**
+- [x] **Step 3: Verify two-browser conflict behavior**
 
 Open the same evaluation in two independent browser contexts. Save in A, then save stale state in B. Prove B displays the conflict message, the server retains A, and B cannot auto-save again until reload.
 
-- [ ] **Step 4: Verify admin-only workflow**
+- [x] **Step 4: Verify admin-only workflow**
 
 Log in as admin, create/disable a teacher, inspect audit, preview an emergency JSON, confirm import, trash the imported record, provide a reason, and permanently delete it. Verify the teacher context cannot see or call the corresponding admin actions.
 
-- [ ] **Step 5: Verify Pages remains local and disconnected**
+- [x] **Step 5: Verify Pages remains local and disconnected**
 
 Serve the repository with the existing static server, create local data, reload it, inspect network requests to prove no `/api/` call, export emergency JSON, and verify it contains no AI key. Capture a Pages-mode screenshot.
 
-- [ ] **Step 6: Record evidence and commit the phase gate**
+- [x] **Step 6: Record evidence and commit the phase gate**
 
 Document URLs as loopback only, app commit, seeded accounts as non-secret fixture names, screenshots, console/network results, exact automation commands, and limitations. Mark only executed plan boxes and commit evidence.
 
