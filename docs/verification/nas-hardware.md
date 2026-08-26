@@ -34,6 +34,13 @@
 | 最终状态 | `.env`、`current.env`、`current` 均指向 `v0.1.9` |
 | 回滚基线 | `PREVIOUS_APP_VERSION=v0.1.7` |
 
+### 临时访问证据
+
+| 项 | 清洗后证据 |
+| --- | --- |
+| 临时 Ed25519 public-key fingerprint | `256 SHA256:/lUePxDK2eau0GmYPHeA3IaIPwHGrhzwsC+ald/GY2I makerseed-nas-v0.1.0-20260826 (ED25519)` |
+| 访问边界 | 已按 least-privilege 临时授权；未记录私钥路径、私钥内容、源 IP、NAS 密码、用户名或 Cookie |
+
 ### NAS before-state
 
 | 项 | 清洗后证据 |

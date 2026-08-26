@@ -392,7 +392,7 @@ Create only `/volume1/docker/makerseed-diagnostic` children. Generate database/s
 
 - [x] **Step 5: Start two containers and inspect hardening**
 
-Run `docker-compose -p makerseed-diagnostic --project-directory /volume1/docker/makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, split networks (`backend` internal with `db` only there, `edge` non-internal with `app` only), stable project-root labels for newly recreated containers, manifest-bound legacy release labels for unrecreated containers, and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
+Run `docker-compose -p makerseed-diagnostic --project-directory /volume1/docker/makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, split networks (`backend` internal with `app` and `db`, `edge` non-internal with `app` only), stable project-root labels for newly recreated containers, manifest-bound legacy release labels for unrecreated containers, and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
 
 - [ ] **Step 6: Execute real PostgreSQL and browser workflows through the tunnel**
 
