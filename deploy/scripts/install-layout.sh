@@ -11,7 +11,7 @@ require_project_root_identity
 : "${PREFLIGHT_NONCE:?PREFLIGHT_NONCE is required}"
 : "${PREFLIGHT_BINDING_HASH:?PREFLIGHT_BINDING_HASH is required}"
 
-BOOTSTRAP_STAGE=${BOOTSTRAP_STAGE:-/volume1/docker/.makerseed-diagnostic-bootstrap/$RELEASE_ID-$PREFLIGHT_NONCE}
+BOOTSTRAP_STAGE=${BOOTSTRAP_STAGE:-/volume1/.makerseed-diagnostic-bootstrap/$RELEASE_ID-$PREFLIGHT_NONCE}
 STAGED_RELEASE_ROOT=${STAGED_RELEASE_ROOT:-$BOOTSTRAP_STAGE/release/deploy}
 RELEASE_TREE_MANIFEST=${RELEASE_TREE_MANIFEST:-$BOOTSTRAP_STAGE/release-tree.sha256}
 
@@ -29,6 +29,22 @@ fi
 if [ -e "$PROJECT_ROOT" ] || [ -L "$PROJECT_ROOT" ]; then
   echo "ABORT: project root exists before bootstrap layout" >&2
   exit 60
+fi
+if [ ! -d /volume1 ] || [ -L /volume1 ]; then
+  echo "ABORT: verified volume /volume1 is missing or unsafe" >&2
+  exit 60
+fi
+if [ -e /volume1/docker ] || [ -L /volume1/docker ]; then
+  if [ ! -d /volume1/docker ] || [ -L /volume1/docker ]; then
+    echo "ABORT: Docker parent exists but is unsafe" >&2
+    exit 60
+  fi
+  docker_parent=$(safe_realpath /volume1/docker)
+  [ "$docker_parent" = "/volume1/docker" ] || { echo "ABORT: Docker parent resolves outside /volume1/docker" >&2; exit 60; }
+else
+  mkdir /volume1/docker
+  chown 0:0 /volume1/docker
+  chmod 755 /volume1/docker
 fi
 
 target_release="$PROJECT_ROOT/releases/$RELEASE_ID"
@@ -60,8 +76,9 @@ chmod 700 "$PROJECT_ROOT" "$PROJECT_ROOT/data" "$PROJECT_ROOT/data/postgres" \
 
 mkdir "$incoming_release"
 cp -pR "$BOOTSTRAP_STAGE/release/." "$incoming_release/"
+cp "$RELEASE_TREE_MANIFEST" "$incoming_release/release-tree.sha256"
 # re-verify copied release tree before publishing immutable release
-verify_release_tree "$incoming_release" "$RELEASE_TREE_MANIFEST"
+verify_release_tree "$incoming_release" "$incoming_release/release-tree.sha256"
 chmod 755 "$incoming_release/deploy"/scripts/*.sh "$incoming_release/deploy/postgres-init/10-create-runtime-role.sh"
 chmod 755 "$incoming_release/deploy" "$incoming_release/deploy/postgres-init" "$incoming_release/deploy/scripts"
 chmod 644 "$incoming_release/deploy/compose.yaml" "$incoming_release/deploy/Dockerfile" "$incoming_release/deploy/env.example" 2>/dev/null || true

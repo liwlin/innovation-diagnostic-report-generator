@@ -27,10 +27,18 @@ case "$PREFLIGHT_NONCE" in
   *) echo "ABORT: PREFLIGHT_NONCE must be at least four safe characters" >&2; exit 50 ;;
 esac
 
-case "$APP_IMAGE" in
-  "$APP_REPOSITORY"@sha256:????????????????????????????????????????????????????????????????) ;;
-  *) echo "ABORT: APP_IMAGE must include an immutable SHA-256 digest for $APP_REPOSITORY" >&2; exit 55 ;;
-esac
+validate_app_image() {
+  case "$APP_IMAGE" in
+    "$APP_REPOSITORY"@sha256:*) ;;
+    *) echo "ABORT: APP_IMAGE must include an immutable SHA-256 digest for $APP_REPOSITORY" >&2; exit 55 ;;
+  esac
+  image_digest=${APP_IMAGE#"$APP_REPOSITORY"@sha256:}
+  if ! printf '%s\n' "$image_digest" | grep -E '^[0-9a-f]{64}$' >/dev/null 2>&1; then
+    echo "ABORT: APP_IMAGE digest must be exactly 64 lowercase hex characters" >&2
+    exit 55
+  fi
+}
+validate_app_image
 
 version_ge() {
   actual=$1
@@ -67,11 +75,17 @@ common_host_checks() {
     echo "ABORT: Docker Compose must be at least $MIN_COMPOSE_VERSION" >&2
     exit 50
   fi
-  if [ ! -d /volume1/docker ] || [ -L /volume1/docker ]; then
-    echo "ABORT: verified Docker parent /volume1/docker is missing or unsafe" >&2
-    exit 51
+  case "$PREFLIGHT_MODE" in
+    bootstrap) df_root=/volume1 ;;
+    runtime) df_root=/volume1/docker ;;
+    *) df_root=/volume1 ;;
+  esac
+  if [ "$PREFLIGHT_MODE" = "bootstrap" ]; then
+    [ -d /volume1 ] && [ ! -L /volume1 ] || { echo "ABORT: verified volume /volume1 is missing or unsafe" >&2; exit 51; }
+  else
+    [ -d /volume1/docker ] && [ ! -L /volume1/docker ] || { echo "ABORT: verified Docker parent /volume1/docker is missing or unsafe" >&2; exit 51; }
   fi
-  free_kb=$(df -Pk /volume1/docker | awk 'NR==2 {print $4}')
+  free_kb=$(df -Pk "$df_root" | awk 'NR==2 {print $4}')
   available_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
   if [ -z "$free_kb" ] || [ "$free_kb" -lt 5242880 ]; then
     echo "ABORT: less than 5 GiB is available on the target volume" >&2
@@ -112,19 +126,44 @@ collision_checks() {
   done
 }
 
-verify_app_image_evidence() {
+proof_value() {
+  key=$1
+  file=$2
+  count=$(grep -c "^$key=" "$file" || true)
+  [ "$count" -eq 1 ] || { echo "ABORT: image tar proof must contain exactly one $key field" >&2; exit 56; }
+  sed -n "s/^$key=//p" "$file"
+}
+
+verify_bootstrap_app_image_evidence() {
   image_source=local-digest
+  image_tar_path=''
+  image_tar_hash=''
+  image_tar_proof_hash=''
   if docker image inspect "$APP_IMAGE" >/dev/null 2>&1; then
     return 0
   fi
   if [ -n "${IMAGE_TAR:-}" ]; then
+    : "${IMAGE_TAR_PROOF:?IMAGE_TAR_PROOF is required when IMAGE_TAR is used}"
     [ -f "$IMAGE_TAR" ] && [ ! -L "$IMAGE_TAR" ] || { echo "ABORT: IMAGE_TAR is missing or unsafe" >&2; exit 56; }
-    case "${BOOTSTRAP_STAGE:-}" in
-      '') ;;
-      *) case "$(safe_realpath "$IMAGE_TAR")" in "$BOOTSTRAP_STAGE"/*) ;; *) echo "ABORT: IMAGE_TAR must be inside the bootstrap stage" >&2; exit 56 ;; esac ;;
-    esac
-    [ -f "$IMAGE_TAR.sha256" ] && [ ! -L "$IMAGE_TAR.sha256" ] || { echo "ABORT: IMAGE_TAR sha256 proof is missing or unsafe" >&2; exit 56; }
-    (cd "$(dirname "$IMAGE_TAR")" && sha256sum -c "$(basename "$IMAGE_TAR").sha256") >/dev/null
+    [ -f "$IMAGE_TAR_PROOF" ] && [ ! -L "$IMAGE_TAR_PROOF" ] || { echo "ABORT: IMAGE_TAR_PROOF is missing or unsafe" >&2; exit 56; }
+    image_tar_path=$(safe_realpath "$IMAGE_TAR")
+    image_tar_proof_path=$(safe_realpath "$IMAGE_TAR_PROOF")
+    case "$image_tar_path" in "$BOOTSTRAP_STAGE"/*) ;; *) echo "ABORT: IMAGE_TAR must be inside the bootstrap stage" >&2; exit 56 ;; esac
+    case "$image_tar_proof_path" in "$BOOTSTRAP_STAGE"/*) ;; *) echo "ABORT: IMAGE_TAR_PROOF must be inside the bootstrap stage" >&2; exit 56 ;; esac
+    proof_version=$(proof_value proof_version "$IMAGE_TAR_PROOF")
+    proof_app_image=$(proof_value app_image "$IMAGE_TAR_PROOF")
+    proof_tar_path=$(proof_value image_tar_path "$IMAGE_TAR_PROOF")
+    proof_tar_hash=$(proof_value image_tar_sha256 "$IMAGE_TAR_PROOF")
+    [ "$proof_version" = "1" ] || { echo "ABORT: image tar proof version is unsupported" >&2; exit 56; }
+    [ "$proof_app_image" = "$APP_IMAGE" ] || { echo "ABORT: image tar proof does not match APP_IMAGE" >&2; exit 56; }
+    [ "$proof_tar_path" = "$image_tar_path" ] || { echo "ABORT: image tar proof does not match canonical tar path" >&2; exit 56; }
+    image_tar_hash=$(sha256sum "$IMAGE_TAR" | awk '{print $1}')
+    if ! printf '%s\n' "$proof_tar_hash" | grep -E '^[0-9a-f]{64}$' >/dev/null 2>&1; then
+      echo "ABORT: image tar proof hash must be lowercase SHA-256" >&2
+      exit 56
+    fi
+    [ "$proof_tar_hash" = "$image_tar_hash" ] || { echo "ABORT: image tar proof hash mismatch" >&2; exit 56; }
+    image_tar_proof_hash=$(sha256sum "$IMAGE_TAR_PROOF" | awk '{print $1}')
     image_source=verified-tar
     return 0
   fi
@@ -133,6 +172,18 @@ verify_app_image_evidence() {
     return 0
   fi
   echo "ABORT: app image digest is not locally present and no read-only GHCR/tar proof is available" >&2
+  exit 56
+}
+
+verify_runtime_app_image_evidence() {
+  image_source=local-digest
+  image_tar_path=''
+  image_tar_hash=''
+  image_tar_proof_hash=''
+  if docker image inspect "$APP_IMAGE" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "ABORT: runtime preflight requires APP_IMAGE to be locally inspectable at the exact digest" >&2
   exit 56
 }
 
@@ -164,15 +215,19 @@ emit_verdict() {
     "app_version=${APP_VERSION:-}" \
     "commit=${COMMIT_SHA:-}" \
     "app_image=$APP_IMAGE" \
+    "image_source=$image_source" \
+    "image_tar_path=$image_tar_path" \
+    "image_tar_hash=$image_tar_hash" \
+    "image_tar_proof_hash=$image_tar_proof_hash" \
     "report_root_phase=$REPORT_ROOT_PHASE" \
     "report_root=$report_root" \
     "project_root=$PROJECT_ROOT" \
     "project_root_before_state=$before_state" \
     "collision_result=$collision_result" | sha256sum | awk '{print $1}')
-  printf '{"result":"pass","mode":"%s","nonce":"%s","binding_hash":"%s","architecture":"x86_64","project_root":"%s","project_root_before_state":"%s","release_id":"%s","release_path":"%s","release_manifest_hash":"%s","release_tree_hash":"%s","image_source":"%s","app_image":"%s","compose_version":"%s","report_root_phase":"%s","report_root":"%s"}\n' \
+  printf '{"result":"pass","mode":"%s","nonce":"%s","binding_hash":"%s","architecture":"x86_64","project_root":"%s","project_root_before_state":"%s","release_id":"%s","release_path":"%s","release_manifest_hash":"%s","release_tree_hash":"%s","image_source":"%s","image_tar_path":"%s","image_tar_hash":"%s","image_tar_proof_hash":"%s","app_image":"%s","compose_version":"%s","report_root_phase":"%s","report_root":"%s"}\n' \
     "$(json_escape "$mode")" "$(json_escape "$PREFLIGHT_NONCE")" "$binding_hash" "$(json_escape "$PROJECT_ROOT")" "$(json_escape "$before_state")" \
     "$(json_escape "$release_id")" "$(json_escape "$release_path")" "$manifest_hash" "$tree_hash" "$(json_escape "$image_source")" \
-    "$(json_escape "$APP_IMAGE")" "$(json_escape "$compose_version")" "$(json_escape "$REPORT_ROOT_PHASE")" "$(json_escape "$report_root")"
+    "$(json_escape "$image_tar_path")" "$image_tar_hash" "$image_tar_proof_hash" "$(json_escape "$APP_IMAGE")" "$(json_escape "$compose_version")" "$(json_escape "$REPORT_ROOT_PHASE")" "$(json_escape "$report_root")"
 }
 
 bootstrap_preflight() {
@@ -185,11 +240,11 @@ bootstrap_preflight() {
     absent) ;;
     *) echo "ABORT: PROJECT_ROOT must not exist for bootstrap" >&2; exit 51 ;;
   esac
-  BOOTSTRAP_STAGE=${BOOTSTRAP_STAGE:-/volume1/docker/.makerseed-diagnostic-bootstrap/$RELEASE_ID-$PREFLIGHT_NONCE}
+  BOOTSTRAP_STAGE=${BOOTSTRAP_STAGE:-/volume1/.makerseed-diagnostic-bootstrap/$RELEASE_ID-$PREFLIGHT_NONCE}
   STAGED_RELEASE_ROOT=${STAGED_RELEASE_ROOT:-$BOOTSTRAP_STAGE/release/deploy}
   RELEASE_TREE_MANIFEST=${RELEASE_TREE_MANIFEST:-$BOOTSTRAP_STAGE/release-tree.sha256}
-  expected_stage=/volume1/docker/.makerseed-diagnostic-bootstrap/$RELEASE_ID-$PREFLIGHT_NONCE
-  [ "$BOOTSTRAP_STAGE" = "$expected_stage" ] || { echo "ABORT: BOOTSTRAP_STAGE must be nonce-bound under /volume1/docker/.makerseed-diagnostic-bootstrap" >&2; exit 52; }
+  expected_stage=/volume1/.makerseed-diagnostic-bootstrap/$RELEASE_ID-$PREFLIGHT_NONCE
+  [ "$BOOTSTRAP_STAGE" = "$expected_stage" ] || { echo "ABORT: BOOTSTRAP_STAGE must be nonce-bound under /volume1/.makerseed-diagnostic-bootstrap" >&2; exit 52; }
   [ -d "$BOOTSTRAP_STAGE" ] && [ ! -L "$BOOTSTRAP_STAGE" ] || { echo "ABORT: bootstrap stage is missing or unsafe" >&2; exit 52; }
   [ "$(safe_realpath "$BOOTSTRAP_STAGE")" = "$expected_stage" ] || { echo "ABORT: bootstrap stage resolves outside the approved root" >&2; exit 52; }
   [ "$(file_mode "$BOOTSTRAP_STAGE")" = "700" ] || { echo "ABORT: bootstrap stage must be mode 0700" >&2; exit 52; }
@@ -200,7 +255,7 @@ bootstrap_preflight() {
   [ -d "$STAGED_RELEASE_ROOT" ] || { echo "ABORT: staged deploy root is missing" >&2; exit 52; }
   release_manifest_hash=$(sha256sum "$RELEASE_TREE_MANIFEST" | awk '{print $1}')
   release_tree_hash=$release_manifest_hash
-  verify_app_image_evidence
+  verify_bootstrap_app_image_evidence
   emit_verdict bootstrap "$RELEASE_ID" "$PROJECT_ROOT/releases/$RELEASE_ID/deploy" "$release_manifest_hash" "$release_tree_hash" "$before_state" "$ISOLATED_REPORT_ROOT"
 }
 
@@ -218,6 +273,9 @@ runtime_preflight() {
   esac
   [ "$resolved_release" = "$PROJECT_ROOT/releases/$RELEASE_ID/deploy" ] || { echo "ABORT: RELEASE_ROOT must match RELEASE_ID" >&2; exit 52; }
   [ -f "$RELEASE_ROOT/compose.yaml" ] && [ -f "$RELEASE_ROOT/Dockerfile" ] || { echo "ABORT: release files are incomplete" >&2; exit 52; }
+  final_release_base="$PROJECT_ROOT/releases/$RELEASE_ID"
+  final_release_manifest="$final_release_base/release-tree.sha256"
+  verify_release_tree "$final_release_base" "$final_release_manifest"
   resolved_secrets=$(safe_realpath "$SECRETS_ROOT")
   case "$resolved_secrets" in
     "$PROJECT_ROOT"/secrets) ;;
@@ -263,9 +321,9 @@ runtime_preflight() {
       *) echo "ABORT: unexpected entry exists in project root: $name" >&2; exit 57 ;;
     esac
   done
-  release_manifest_hash=$(find "$RELEASE_ROOT" -type f -exec sha256sum {} \; | LC_ALL=C sort | sha256sum | awk '{print $1}')
+  release_manifest_hash=$(sha256sum "$final_release_manifest" | awk '{print $1}')
   release_tree_hash=$release_manifest_hash
-  verify_app_image_evidence
+  verify_runtime_app_image_evidence
   emit_verdict runtime "$RELEASE_ID" "$RELEASE_ROOT" "$release_manifest_hash" "$release_tree_hash" exists "$resolved_report"
 }
 

@@ -121,6 +121,12 @@ verify_release_tree() {
   manifest=$2
   [ -d "$release_base" ] && [ ! -L "$release_base" ] || { echo "ABORT: staged release tree is missing or unsafe" >&2; exit 52; }
   [ -f "$manifest" ] && [ ! -L "$manifest" ] || { echo "ABORT: release tree manifest is missing or unsafe" >&2; exit 52; }
+  release_real=$(safe_realpath "$release_base")
+  manifest_real=$(safe_realpath "$manifest")
+  manifest_rel=''
+  case "$manifest_real" in
+    "$release_real"/*) manifest_rel=${manifest_real#"$release_real"/} ;;
+  esac
   if find "$release_base" -type l -print | grep . >/dev/null 2>&1; then
     echo "ABORT: release tree must not contain symlinks" >&2
     exit 52
@@ -133,13 +139,15 @@ verify_release_tree() {
     echo "ABORT: release tree contains hardlinked files" >&2
     exit 52
   fi
-  if ! awk '
+  if ! LC_ALL=C awk '
     index($0, "  ") == 65 {
       hash = substr($0, 1, 64)
       rel = substr($0, 67)
       if (hash !~ /^[0-9a-f]{64}$/ || rel == "" || rel ~ /^\// || rel ~ /^-/ || rel ~ /\\/ || rel ~ /(^|\/)\.\.(\/|$)/ || rel ~ /[[:cntrl:]]/) exit 1
       if (rel !~ /^[ -~]+$/) exit 1
+      if (last != "" && rel <= last) exit 1
       if (seen[rel]++) exit 1
+      last = rel
       next
     }
     { exit 1 }
@@ -151,6 +159,7 @@ verify_release_tree() {
     cd "$release_base"
     find . -type f | sed 's#^\./##' | LC_ALL=C sort
   ) | while IFS= read -r rel; do
+    [ "$rel" != "$manifest_rel" ] || continue
     matches=$(awk -v p="$rel" 'index($0, "  ") == 65 { if (substr($0, 67) == p) c++ } END { print c + 0 }' "$manifest")
     [ "$matches" -eq 1 ] || { echo "ABORT: regular staged file is missing from manifest: $rel" >&2; exit 52; }
   done

@@ -74,7 +74,7 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -File tests/verify-deploy-scripts.ps1
       - name: Verify bootstrap preflight protocol
-        run: sudo sh tests/linux/verify-bootstrap-preflight.sh
+        run: sudo env MKSEED_EPHEMERAL_VOLUME1_TEST=1 sh tests/linux/verify-bootstrap-preflight.sh
 
   secret-scan:
     name: Secret scan

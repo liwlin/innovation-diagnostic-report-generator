@@ -29,10 +29,6 @@ fi
 cleanup_lock() { rmdir "$lock_dir" 2>/dev/null || true; }
 trap cleanup_lock EXIT HUP INT TERM
 
-if [ -n "${IMAGE_TAR:-}" ] && ! docker image inspect "$APP_IMAGE" >/dev/null 2>&1; then
-  docker load --input "$IMAGE_TAR" >/dev/null
-  docker image inspect "$APP_IMAGE" >/dev/null
-fi
 docker image inspect "$APP_IMAGE" >/dev/null
 
 state_dir="$PROJECT_ROOT/deployment-state"

@@ -254,7 +254,7 @@ Require preflight collision checks, exact target check before directory creation
 
 - [x] **Step 2: Implement read-only preflight**
 
-`preflight.sh` runs as one read-only script with `PREFLIGHT_MODE=bootstrap|runtime`. Bootstrap mode validates the absent final project root, the root-owned nonce-bound staged release under `/volume1/docker/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>`, the canonical `release-tree.sha256`, collision/resource/image evidence, and emits a `binding_hash` without requiring final secrets. Runtime mode validates the final immutable `RELEASE_ROOT`, `.env`, `SECRETS_ROOT`, all runtime and maintenance secrets including `database_owner_url`, final mounts, collision/resource/image evidence, and is the only preflight mode that may approve `deploy.sh`.
+`preflight.sh` runs as one read-only script with `PREFLIGHT_MODE=bootstrap|runtime`. Bootstrap mode validates the absent final project root, allows `/volume1/docker` to be absent, validates the root-owned nonce-bound staged release under `/volume1/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>`, the canonical `release-tree.sha256`, collision/resource/image evidence, and emits a `binding_hash` without requiring final secrets. Runtime mode validates the final immutable `RELEASE_ROOT`, `.env`, `SECRETS_ROOT`, all runtime and maintenance secrets including `database_owner_url`, final mounts, collision/resource/image evidence, and is the only preflight mode that may approve `deploy.sh`.
 
 - [x] **Step 3: Implement one-time isolated layout creation**
 
@@ -384,11 +384,11 @@ Record NAS kernel/architecture, free memory, target volume free space, Docker/Co
 
 - [ ] **Step 3: Run preflight and verify zero writes on failure**
 
-Transfer signed/checksummed release content into `/volume1/docker/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>/release`, write its canonical sorted `release-tree.sha256`, run `PREFLIGHT_MODE=bootstrap preflight.sh`, and compare target path/container state before/after. Any existing project root, unsafe stage, manifest mismatch, extra file, collision, symlink, port use, or unverified digest stops before final-root writes. After layout and secret creation, run `PREFLIGHT_MODE=runtime preflight.sh`; only runtime mode may approve `deploy.sh`.
+Transfer signed/checksummed release content into `/volume1/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>/release`, write its canonical sorted `release-tree.sha256`, run `PREFLIGHT_MODE=bootstrap preflight.sh`, and compare target path/container state before/after. Bootstrap must leave both `/volume1/docker` and `/volume1/docker/makerseed-diagnostic` absent when they start absent. Any existing project root, unsafe stage, manifest mismatch, extra file, collision, symlink, port use, or unverified digest stops before final-root writes. After binding, `install-layout.sh` may create exact `/volume1/docker` and `/volume1/docker/makerseed-diagnostic`; after secret creation, run `PREFLIGHT_MODE=runtime preflight.sh`; only runtime mode may approve `deploy.sh`.
 
 - [ ] **Step 4: Install exact isolated layout and secrets**
 
-Create only `/volume1/docker/makerseed-diagnostic` children. Generate database/session/bootstrap secrets on NAS with mode `0600`; do not print or transfer them back. Load/pull only the verified image digests. Run migrations and one-time admin bootstrap, then invalidate/remove bootstrap material.
+Create only `/volume1/docker/makerseed-diagnostic` children. Generate database/session/bootstrap secrets on NAS with mode `0600`; do not print or transfer them back. For offline installs, load the proof-bound image tar only after `install-layout.sh` has succeeded and before `PREFLIGHT_MODE=runtime`; online installs may pull only the exact verified image digest in the same window. Run migrations and one-time admin bootstrap, then invalidate/remove bootstrap material.
 
 - [ ] **Step 5: Start two containers and inspect hardening**
 
