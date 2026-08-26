@@ -332,7 +332,7 @@ pwsh -NoProfile -File tests/verify-deploy-scripts.ps1
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit and push for CI evidence**
+- [x] **Step 6: Commit and push for CI evidence**
 
 Commit workflows and version wiring with Lore trailers, push the reviewed branch, wait for CI, and record exact run URLs and conclusions. A green workflow counts only for the checks it actually executed.
 
@@ -354,11 +354,11 @@ Run Python tests, Ruff, mypy, all Node tests, static Pages test, Compose securit
 
 Use the CI-published digest. Inspect user, entrypoint, labels, SBOM, vulnerability verdict, layers for secret filenames/content, and expected static assets. Confirm the tag and embedded version map to the same commit.
 
-- [ ] **Step 3: Record release-candidate evidence**
+- [x] **Step 3: Record release-candidate evidence**
 
 State explicitly that local/CI evidence is not NAS proof. Block Task 7 unless every prerequisite passes and the only remaining writes are the exact isolated NAS targets.
 
-- [ ] **Step 4: Commit local evidence**
+- [x] **Step 4: Commit local evidence**
 
 Commit non-sensitive evidence and artifact summaries; do not commit downloaded image tarballs, secrets, cookies, or screenshots containing real student/company data.
 
