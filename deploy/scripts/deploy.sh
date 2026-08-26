@@ -273,7 +273,7 @@ trap rollback_on_error EXIT HUP INT TERM
 if [ "$previous_exists" -eq 0 ]; then
   compose run --rm --no-deps \
     -v "$INITIAL_ADMIN_PASSWORD_FILE:/run/bootstrap/initial_admin_password:ro" \
-    app python -m makerseed_app.cli bootstrap-admin \
+    app /opt/app/.venv/bin/python -m makerseed_app.cli bootstrap-admin \
       --username "$BOOTSTRAP_ADMIN_USERNAME" \
       --display-name "$BOOTSTRAP_ADMIN_DISPLAY_NAME" \
       --password-file /run/bootstrap/initial_admin_password

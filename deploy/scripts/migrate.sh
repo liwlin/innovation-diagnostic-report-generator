@@ -15,4 +15,4 @@ require_regular_secret "$owner_url_file"
 compose run --rm --no-deps \
   -e MKSEED_MIGRATION_DATABASE_URL_FILE=/run/maintenance/database_owner_url \
   -v "$owner_url_file:/run/maintenance/database_owner_url:ro" \
-  app alembic -c /opt/app/server/alembic.ini upgrade head
+  app /opt/app/.venv/bin/python -m alembic -c /opt/app/server/alembic.ini upgrade head

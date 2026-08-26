@@ -61,12 +61,18 @@ $preflight = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/pr
 $preflightCommon = $preflight + (Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/common.sh') -Raw -Encoding UTF8)
 $envExample = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/env.example') -Raw -Encoding UTF8
 $composeYaml = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/compose.yaml') -Raw -Encoding UTF8
+$dockerfile = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/Dockerfile') -Raw -Encoding UTF8
 Assert-Condition ($envExample -match 'REPORT_ROOT_PHASE=isolated') 'env.example must default hardware preflight to the isolated report-root phase.'
 Assert-Condition ($envExample -match 'REPORT_ROOT=/volume1/docker/makerseed-diagnostic/reports-staging') 'env.example must default reports to project-owned staging before File Station promotion.'
 Assert-Condition ($envExample -match 'RELEASE_ROOT=/volume1/docker/makerseed-diagnostic/releases/.+/deploy') 'env.example must use an immutable release deploy path.'
 Assert-Condition ($envExample -notmatch 'current/deploy') 'env.example must not point RELEASE_ROOT at mutable current/deploy.'
 Assert-Condition ($envExample -notmatch '(?m)^APP_IMAGE=.*:[^@\r\n]+@sha256:' -and $envExample -match '(?m)^APP_IMAGE=ghcr\.io/liwlin/innovation-diagnostic-report-generator@sha256:' ) 'env.example must prefer digest-only APP_IMAGE references.'
 Assert-Condition ($composeYaml -match 'source:\s*\$\{REPORT_ROOT') 'Compose must mount the explicit phase-validated REPORT_ROOT.'
+Assert-Condition ($composeYaml -match 'test: \["CMD", "/opt/app/\.venv/bin/python", "-c"') 'Compose app healthcheck must use the relocated venv interpreter.'
+Assert-Condition ($dockerfile -match 'HEALTHCHECK[\s\S]*CMD \["/opt/app/\.venv/bin/python", "-c"') 'Dockerfile healthcheck must use the relocated venv interpreter.'
+Assert-Condition ($dockerfile -match 'CMD \["/opt/app/\.venv/bin/python", "-m", "uvicorn"') 'Dockerfile default CMD must use the relocated venv interpreter with python -m uvicorn.'
+Assert-Condition ($dockerfile -notmatch 'CMD \["uvicorn"') 'Dockerfile must not use relocated venv console scripts for default startup.'
+Assert-Condition ($dockerfile -match 'uv sync --frozen --no-dev --no-editable') 'Dockerfile must install the app non-editably before relocating the venv.'
 foreach ($mutation in @('mkdir', 'touch', 'docker pull', 'docker load', 'docker-compose up', 'mv ', 'cp ')) {
     Assert-Condition ($preflight -notlike "*$mutation*") "Preflight must remain read-only; found: $mutation"
 }
@@ -124,6 +130,11 @@ Assert-Condition ($layout -match 'project root exists before bootstrap layout') 
 Assert-Condition ($layout -notmatch '(synoshare|synouser|synogroup)') 'Install layout must not create DSM shares, users, or groups.'
 
 $deploy = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/deploy.sh') -Raw -Encoding UTF8
+$migrate = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/migrate.sh') -Raw -Encoding UTF8
+Assert-Condition ($migrate -match 'app /opt/app/\.venv/bin/python -m alembic -c /opt/app/server/alembic\.ini upgrade head') 'Migrate must use python -m alembic through the relocated venv interpreter.'
+Assert-Condition ($migrate -notmatch 'app alembic') 'Migrate must not use the relocated alembic console script.'
+Assert-Condition ($deploy -match 'app /opt/app/\.venv/bin/python -m makerseed_app\.cli bootstrap-admin') 'First-install bootstrap-admin must use python -m makerseed_app.cli through the relocated venv interpreter.'
+Assert-Condition ($deploy -notmatch 'app python -m makerseed_app\.cli') 'Deploy must not use bare PATH python for bootstrap-admin.'
 $previousStateReadPosition = $deploy.IndexOf('sed -n ''s/^RELEASE_ROOT=//p'' "$previous_state"')
 $previousStateCanonicalHashCheckPosition = $deploy.IndexOf('require_canonical_current_env_sha256 "$previous_state.sha256"')
 $previousStateHashCheckPosition = $deploy.IndexOf('sha256sum -c current.env.sha256')

@@ -97,6 +97,9 @@ try {
     Assert-Condition ([int]$db.ulimits.nproc.hard -le 256) 'Database nproc hard limit must be at most 256.'
     Assert-Condition ([int64]$app.mem_limit -le 1610612736) 'App memory limit exceeds 1536 MiB.'
     Assert-Condition ([int64]$db.mem_limit -le 2147483648) 'Database memory limit exceeds 2048 MiB.'
+    Assert-Condition (@($app.healthcheck.test)[0] -eq 'CMD') 'App healthcheck must use exec form.'
+    Assert-Condition (@($app.healthcheck.test)[1] -eq '/opt/app/.venv/bin/python') 'App healthcheck must use the absolute relocated venv interpreter.'
+    Assert-Condition ((@($app.healthcheck.test) -join ' ') -match 'urllib\.request') 'App healthcheck must execute the Python health probe.'
 
     $appPorts = @($app.ports | Where-Object { $null -ne $_ })
     Assert-Condition ($appPorts.Count -eq 1) 'App must expose exactly one host port.'

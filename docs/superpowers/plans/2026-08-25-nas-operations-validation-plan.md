@@ -114,7 +114,7 @@ Expected: fail because `deploy/compose.yaml` is absent.
 
 - [x] **Step 3: Create a digest-pinned multi-stage app image**
 
-Use a digest-pinned Python 3.12 slim Debian base. The build stage installs the locked wheel set; the runtime stage installs only Noto CJK font and required shared libraries, copies the virtual environment and static assets, creates UID/GID `10001`, and sets `USER 10001:10001`. Entrypoint runs Uvicorn with one worker and no reload. Do not place a shell package manager cache, Git metadata, tests, secrets, uploads, `.omx`, or local preview files in the runtime image.
+Use a digest-pinned Python 3.12 slim Debian base. The build stage installs the locked wheel set; the runtime stage installs only Noto CJK font and required shared libraries, copies the virtual environment and static assets, creates UID/GID `10001`, and sets `USER 10001:10001`. Because the build virtualenv is relocated into `/opt/app/.venv`, all image-runtime commands that pass through Tini use `/opt/app/.venv/bin/python -m ...` instead of relocated console scripts or bare PATH lookup. Entrypoint runs Uvicorn with one worker and no reload. Do not place a shell package manager cache, Git metadata, tests, secrets, uploads, `.omx`, or local preview files in the runtime image.
 
 - [x] **Step 4: Create the two-service Compose file**
 

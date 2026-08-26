@@ -161,8 +161,8 @@ case "$command_name" in
     ;;
   run)
     case "$*" in
-      *"alembic -c /opt/app/server/alembic.ini upgrade head"*) : >"$FAKE_STATE_DIR/migrated" ;;
-      *"python -m makerseed_app.cli bootstrap-admin"*) : >"$FAKE_STATE_DIR/bootstrapped" ;;
+      *"/opt/app/.venv/bin/python -m alembic -c /opt/app/server/alembic.ini upgrade head"*) : >"$FAKE_STATE_DIR/migrated" ;;
+      *"/opt/app/.venv/bin/python -m makerseed_app.cli bootstrap-admin"*) : >"$FAKE_STATE_DIR/bootstrapped" ;;
     esac
     ;;
 esac
@@ -375,7 +375,7 @@ assert_no_upgrade_mutation_started() {
   if grep -q 'pg_dump' "$FAKE_DOCKER_LOG"; then
     fail "unsafe previous deployment checksum was accepted before backup"
   fi
-  if grep -q 'alembic -c /opt/app/server/alembic.ini upgrade head' "$FAKE_DOCKER_LOG"; then
+  if grep -q '/opt/app/.venv/bin/python -m alembic -c /opt/app/server/alembic.ini upgrade head' "$FAKE_DOCKER_LOG"; then
     fail "unsafe previous deployment checksum was accepted before migration"
   fi
   if grep -q 'docker-compose .* up .* app' "$FAKE_DOCKER_LOG"; then
@@ -422,8 +422,8 @@ rm -f "$PROJECT_ROOT/unknown-child"
 write_install_passwords
 run_deploy >/dev/null
 
-migrate_line=$(line_number 'alembic -c /opt/app/server/alembic.ini upgrade head')
-bootstrap_line=$(line_number 'python -m makerseed_app.cli bootstrap-admin')
+migrate_line=$(line_number '/opt/app/.venv/bin/python -m alembic -c /opt/app/server/alembic.ini upgrade head')
+bootstrap_line=$(line_number '/opt/app/.venv/bin/python -m makerseed_app.cli bootstrap-admin')
 app_line=$(line_number 'docker-compose .* up .* app')
 [ -n "$migrate_line" ] || fail "migration command was not captured"
 [ -n "$bootstrap_line" ] || fail "first install did not invoke bootstrap-admin"
@@ -549,7 +549,7 @@ after_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk 
 if grep -q 'pg_dump' "$FAKE_DOCKER_LOG"; then
   fail "alternate smoke file validation ran after backup"
 fi
-if grep -q 'alembic -c /opt/app/server/alembic.ini upgrade head' "$FAKE_DOCKER_LOG"; then
+if grep -q '/opt/app/.venv/bin/python -m alembic -c /opt/app/server/alembic.ini upgrade head' "$FAKE_DOCKER_LOG"; then
   fail "alternate smoke file validation ran after migration"
 fi
 if grep -q 'docker-compose .* up .* app' "$FAKE_DOCKER_LOG"; then

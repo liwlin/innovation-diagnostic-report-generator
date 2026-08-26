@@ -77,6 +77,8 @@ jobs:
         run: sudo env MKSEED_EPHEMERAL_VOLUME1_TEST=1 sh tests/linux/verify-bootstrap-preflight.sh
       - name: Verify first-install admin protocol
         run: sudo env MKSEED_EPHEMERAL_VOLUME1_TEST=1 sh tests/linux/verify-first-install-admin.sh
+      - name: Verify runtime Python entrypoints
+        run: sh tests/linux/verify-runtime-python-entrypoints.sh
 
   secret-scan:
     name: Secret scan

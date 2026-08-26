@@ -69,6 +69,7 @@ jobs:
           pwsh -NoProfile -File tests/verify-deploy-scripts.ps1
           sudo env MKSEED_EPHEMERAL_VOLUME1_TEST=1 sh tests/linux/verify-bootstrap-preflight.sh
           sudo env MKSEED_EPHEMERAL_VOLUME1_TEST=1 sh tests/linux/verify-first-install-admin.sh
+          sh tests/linux/verify-runtime-python-entrypoints.sh
           pwsh -NoProfile -File tests/verify-workflows.ps1
 
   pages-artifact:
