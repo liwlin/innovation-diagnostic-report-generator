@@ -51,7 +51,7 @@ services:
         max-size: 10m
         max-file: "3"
     networks:
-      - default
+      - backend
 
   app:
     image: ${APP_IMAGE:?APP_IMAGE with immutable digest is required}
@@ -117,11 +117,14 @@ services:
         max-size: 10m
         max-file: "3"
     networks:
-      - default
+      - backend
+      - edge
 
 networks:
-  default:
+  backend:
     internal: true
+  edge:
+    internal: false
 
 secrets:
   postgres_owner_password:

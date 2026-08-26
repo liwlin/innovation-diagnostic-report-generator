@@ -50,8 +50,8 @@
 flowchart LR
     T[老师浏览器] -->|HTTPS / 局域网| R[DSM 反向代理]
     A[管理员浏览器] -->|HTTPS / 局域网| R
-    R -->|127.0.0.1 绑定端口| APP[app 容器\n静态页面 + FastAPI + 报告任务]
-    APP -->|内部 Docker 网络| DB[(PostgreSQL 容器)]
+    R -->|127.0.0.1 绑定端口 / edge 网络| APP[app 容器\n静态页面 + FastAPI + 报告任务]
+    APP -->|backend 内部 Docker 网络| DB[(PostgreSQL 容器)]
     APP --> REPORTS[专用报告共享文件夹]
     DB --> DATA[专用数据库目录]
     BACKUP[DSM 定时备份任务] --> DB
@@ -280,6 +280,7 @@ DSM 反向代理承担 TLS 终止和入口转发，因此不再增加 Nginx 容�
 - 应用仅由 DSM HTTPS 反向代理访问。
 - `app` 宿主端口只绑定 `127.0.0.1`。
 - PostgreSQL 不映射宿主端口。
+- Compose 固定两个网络：`backend` 为内部网络且只有 `app` 与 `db` 加入；`edge` 为普通桥接网络且只有 `app` 加入，用于修复 DS220+ 上全内部网络不生成宿主 loopback 端口映射的问题，并保留受控出站 AI 调用能力。
 - DSM 防火墙只允许工坊局域网访问业务入口。
 - QuickConnect 不代理本业务应用。
 

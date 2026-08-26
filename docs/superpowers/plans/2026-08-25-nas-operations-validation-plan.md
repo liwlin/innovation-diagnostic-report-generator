@@ -122,7 +122,7 @@ Use a digest-pinned Python 3.12 slim Debian base. The build stage installs the l
 
 `db` uses a digest-pinned supported PostgreSQL major, `user: "999:999"` after pre-created directory ownership, `read_only: true`, `cap_drop: [ALL]`, `security_opt`, `mem_limit: 2048m`, `cpuset: "0"`, conservative `cpu_shares`, `ulimits.nproc` at 256, `/tmp` and `/var/run/postgresql` tmpfs, project-only data/backup mounts, file-based password, log rotation, and `pg_isready` healthcheck. It uses no host port.
 
-The shared Docker network is `internal: true`. The app depends on `db` with `condition: service_healthy` supported by the verified Synology Compose version.
+Compose uses exactly two project networks after DS220+ proof showed an all-internal network can keep loopback port publishing inert on this DSM kernel: `backend` is `internal: true` and carries database traffic; `edge` is a normal bridge used only by `app` so `127.0.0.1:18081:8080` is published and controlled outbound AI calls remain possible. `db` joins only `backend`; `app` joins exactly `backend` and `edge`. The app depends on `db` with `condition: service_healthy` supported by the verified Synology Compose version.
 
 - [x] **Step 5: Create a safe PostgreSQL role initializer**
 
@@ -392,7 +392,7 @@ Create only `/volume1/docker/makerseed-diagnostic` children. Generate database/s
 
 - [ ] **Step 5: Start two containers and inspect hardening**
 
-Run `docker-compose -p makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, internal network, and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
+Run `docker-compose -p makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, split networks (`backend` internal with `db` only there, `edge` non-internal with `app` only), and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
 
 - [ ] **Step 6: Execute real PostgreSQL and browser workflows through the tunnel**
 

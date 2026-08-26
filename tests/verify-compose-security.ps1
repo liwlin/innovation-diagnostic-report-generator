@@ -43,6 +43,12 @@ function Test-PathWithinRoot {
     return $false
 }
 
+function Get-ObjectPropertyNames {
+    param([object]$Object)
+    if ($null -eq $Object) { return @() }
+    return @($Object.PSObject.Properties.Name)
+}
+
 Assert-Condition (Test-Path -LiteralPath $composePath -PathType Leaf) 'deploy/compose.yaml is missing.'
 
 $dummyBase = Join-Path ([System.IO.Path]::GetTempPath()) 'makerseed-compose-policy'
@@ -72,9 +78,17 @@ try {
     $config = $json | ConvertFrom-Json -Depth 100
     $serviceNames = @($config.services.PSObject.Properties.Name | Sort-Object)
     Assert-Condition (($serviceNames -join ',') -eq 'app,db') 'Exactly app and db services are required.'
+    $networkNames = @(Get-ObjectPropertyNames $config.networks | Sort-Object)
+    Assert-Condition (($networkNames -join ',') -eq 'backend,edge') 'Compose must define exactly backend and edge networks.'
+    Assert-Condition ($config.networks.backend.internal -eq $true) 'Backend network must be internal.'
+    Assert-Condition ($config.networks.edge.internal -ne $true) 'Edge network must not be internal so loopback publishing works on DS220+.'
 
     $app = $config.services.app
     $db = $config.services.db
+    $appNetworkNames = @(Get-ObjectPropertyNames $app.networks | Sort-Object)
+    $dbNetworkNames = @(Get-ObjectPropertyNames $db.networks | Sort-Object)
+    Assert-Condition (($appNetworkNames -join ',') -eq 'backend,edge') 'App must attach exactly to backend and edge networks.'
+    Assert-Condition (($dbNetworkNames -join ',') -eq 'backend') 'Database must attach exactly to the internal backend network.'
     Assert-Condition ($app.user -eq '10001:10001') 'App must run as UID/GID 10001.'
     Assert-Condition ($db.user -eq '999:999') 'Database must run as UID/GID 999.'
     Assert-Condition ($app.read_only -eq $true) 'App root filesystem must be read-only.'
@@ -128,8 +142,7 @@ try {
         Assert-Condition $allowed "Unapproved host bind mount: $source"
     }
 
-    Assert-Condition ($config.networks.default.internal -eq $true) 'Project Docker network must be internal.'
-    Write-Output 'PASS: Compose defines exactly two hardened, isolated, digest-pinned services.'
+    Write-Output 'PASS: Compose defines exactly two hardened, isolated, digest-pinned services with split backend/edge networks.'
 }
 finally {
     foreach ($name in $previous.Keys) {
