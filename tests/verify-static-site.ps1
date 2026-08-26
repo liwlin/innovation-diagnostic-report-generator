@@ -19,12 +19,16 @@ function Assert-Condition {
 
 try {
     $python = Get-Command python -ErrorAction Stop
-    $server = Start-Process `
-        -FilePath $python.Source `
-        -ArgumentList @('-m', 'http.server', $Port, '--bind', '127.0.0.1') `
-        -WorkingDirectory $projectRoot `
-        -WindowStyle Hidden `
-        -PassThru
+    $startArgs = @{
+        FilePath = $python.Source
+        ArgumentList = @('-m', 'http.server', $Port, '--bind', '127.0.0.1')
+        WorkingDirectory = $projectRoot
+        PassThru = $true
+    }
+    if ($IsWindows) {
+        $startArgs.WindowStyle = 'Hidden'
+    }
+    $server = Start-Process @startArgs
 
     $baseUrl = "http://127.0.0.1:$Port"
     $rootResponse = $null

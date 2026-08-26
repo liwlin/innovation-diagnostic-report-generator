@@ -58,6 +58,7 @@ foreach ($token in @(
     'tests/verify-compose-security.ps1',
     'tests/verify-deploy-scripts.ps1',
     'tests/verify-workflows.ps1',
+    'fonts-noto-cjk',
     'git grep',
     'push: false',
     'cache-dependency-path: server/uv.lock'
@@ -90,6 +91,7 @@ foreach ($token in @(
     'tests/verify-compose-security.ps1',
     'tests/verify-deploy-scripts.ps1',
     'tests/verify-workflows.ps1',
+    'fonts-noto-cjk',
     'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.semver }}',
     'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ needs.verify.outputs.release_sha }}',
     'ghcr.io/liwlin/innovation-diagnostic-report-generator@${{ steps.docker_build.outputs.digest }}',

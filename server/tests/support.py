@@ -1,6 +1,29 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
+
+
+def secure_test_file(path: Path) -> Path:
+    if os.name != "nt":
+        path.chmod(0o600)
+    return path
+
+
+def cjk_font_path() -> Path:
+    env_path = os.environ.get("MKSEED_TEST_CJK_FONT")
+    candidates = [
+        Path(env_path) if env_path else None,
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("C:/Windows/Fonts/simhei.ttf"),
+    ]
+    for candidate in candidates:
+        if candidate is not None and candidate.is_file():
+            return candidate
+    raise AssertionError(
+        "No test CJK font found. Install fonts-noto-cjk or set MKSEED_TEST_CJK_FONT."
+    )
 
 
 def default_payload(**changes: Any) -> dict[str, Any]:

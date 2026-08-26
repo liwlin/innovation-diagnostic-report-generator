@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.support import cjk_font_path
+
 SERVER_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = SERVER_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
@@ -36,7 +38,7 @@ def settings(tmp_path):
         session_secret="test-session-secret-that-is-long-enough",
         bootstrap_secret="test-bootstrap-secret-that-is-long-enough",
         report_root=report_root,
-        report_font_path=Path("C:/Windows/Fonts/simhei.ttf"),
+        report_font_path=cjk_font_path(),
         logo_mark_path=project_root / "assets" / "logo-mark.png",
         logo_lockup_path=project_root / "assets" / "logo-lockup.png",
         promo_text="测试课程说明",

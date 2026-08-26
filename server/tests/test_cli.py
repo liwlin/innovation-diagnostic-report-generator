@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
 
 from makerseed_app.models import User
+from tests.support import secure_test_file
 
 
 def test_bootstrap_admin_reads_password_file_and_creates_one_admin(
@@ -15,6 +17,7 @@ def test_bootstrap_admin_reads_password_file_and_creates_one_admin(
 
     password_file = tmp_path / "bootstrap_password"
     password_file.write_text("Bootstrap password 2026\n", encoding="utf-8")
+    secure_test_file(password_file)
 
     created = bootstrap_admin(
         settings,
@@ -36,6 +39,7 @@ def test_bootstrap_admin_refuses_second_initialization(settings, app, tmp_path: 
 
     password_file = tmp_path / "bootstrap_password"
     password_file.write_text("Bootstrap password 2026", encoding="utf-8")
+    secure_test_file(password_file)
     bootstrap_admin(
         settings,
         username="first-admin",
@@ -85,11 +89,32 @@ def test_bootstrap_rejects_short_or_missing_password_file(settings, app, tmp_pat
         )
     short_file = tmp_path / "short"
     short_file.write_text("too-short", encoding="utf-8")
+    secure_test_file(short_file)
     with pytest.raises(BootstrapRefused, match="12 characters"):
         bootstrap_admin(
             settings,
             username="admin",
             display_name="管理员",
             password_file=short_file,
+            session_factory=app.state.session_factory,
+        )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not enforced on Windows")
+def test_bootstrap_rejects_group_or_world_accessible_password_file(
+    settings, app, tmp_path: Path
+):
+    from makerseed_app.cli import BootstrapRefused, bootstrap_admin
+
+    password_file = tmp_path / "insecure"
+    password_file.write_text("Bootstrap password 2026", encoding="utf-8")
+    password_file.chmod(0o644)
+
+    with pytest.raises(BootstrapRefused, match="group/world accessible"):
+        bootstrap_admin(
+            settings,
+            username="admin",
+            display_name="管理员",
+            password_file=password_file,
             session_factory=app.state.session_factory,
         )

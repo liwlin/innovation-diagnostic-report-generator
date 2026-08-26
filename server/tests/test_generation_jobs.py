@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from makerseed_app.models import Evaluation, GenerationRecord
-from tests.support import create_evaluation
+from tests.support import cjk_font_path, create_evaluation
 
 
 def _job_settings(tmp_path: Path):
@@ -21,7 +21,7 @@ def _job_settings(tmp_path: Path):
     return GenerationJobSettings(
         report_root=tmp_path,
         assets=RenderAssets(
-            font_path=Path("C:/Windows/Fonts/simhei.ttf"),
+            font_path=cjk_font_path(),
             logo_mark_path=Path(__file__).resolve().parents[2] / "assets" / "logo-mark.png",
             logo_lockup_path=Path(__file__).resolve().parents[2] / "assets" / "logo-lockup.png",
         ),
@@ -220,7 +220,7 @@ def test_app_lifespan_starts_and_stops_one_generation_worker(settings, tmp_path:
             "generation_worker_enabled": True,
             "generation_poll_seconds": 0.01,
             "report_root": tmp_path,
-            "report_font_path": Path("C:/Windows/Fonts/simhei.ttf"),
+            "report_font_path": cjk_font_path(),
             "logo_mark_path": project_root / "assets" / "logo-mark.png",
             "logo_lockup_path": project_root / "assets" / "logo-lockup.png",
         }

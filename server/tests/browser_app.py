@@ -10,6 +10,7 @@ from makerseed_app.config import Settings
 from makerseed_app.main import create_app
 from makerseed_app.models import Base, Batch, Evaluation, Student, User
 from makerseed_app.security.passwords import hash_password
+from tests.support import cjk_font_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATE_ROOT = Path(os.environ["MKSEED_BROWSER_STATE_ROOT"]).resolve()
@@ -27,7 +28,7 @@ settings = Settings(
     generation_worker_enabled=True,
     generation_poll_seconds=0.1,
     report_root=REPORT_ROOT,
-    report_font_path=Path("C:/Windows/Fonts/simhei.ttf"),
+    report_font_path=cjk_font_path(),
     logo_mark_path=PROJECT_ROOT / "assets" / "logo-mark.png",
     logo_lockup_path=PROJECT_ROOT / "assets" / "logo-lockup.png",
     filename_pattern="{name}_{date}_科创体验报告",

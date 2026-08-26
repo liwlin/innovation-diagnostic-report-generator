@@ -8,6 +8,8 @@ import pytest
 from PIL import Image
 from pypdf import PdfReader
 
+from tests.support import cjk_font_path
+
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "report-snapshot.json"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,10 +23,8 @@ def snapshot_mapping() -> dict:
 def render_assets():
     from makerseed_app.reports.renderer import RenderAssets
 
-    font_path = Path("C:/Windows/Fonts/simhei.ttf")
-    assert font_path.is_file()
     return RenderAssets(
-        font_path=font_path,
+        font_path=cjk_font_path(),
         logo_mark_path=PROJECT_ROOT / "assets" / "logo-mark.png",
         logo_lockup_path=PROJECT_ROOT / "assets" / "logo-lockup.png",
     )
