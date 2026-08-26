@@ -200,35 +200,35 @@ Record owner/runtime separation, append-only audit intent, CLI secret handling, 
 - Consumes: exact project root, running `db`, backup mount, app/schema versions, and Cloud Sync UI.
 - Produces: timestamped custom-format dump, SHA-256 manifest, disposable restore verdict, and isolated monthly/upload-only encrypted task instructions.
 
-- [ ] **Step 1: Write failing static script-safety tests**
+- [x] **Step 1: Write failing static script-safety tests**
 
 The verifier asserts every mutating script calls `require_exact_project_root`, contains no `rm -rf`, no broad `/volume1` target, no unquoted destructive glob, no company share path, and no secret echo. It checks backup names match `makerseed_<UTC>_<app-version>.dump` and manifests include schema/app/hash fields.
 
-- [ ] **Step 2: Run verifier and confirm scripts are absent**
+- [x] **Step 2: Run verifier and confirm scripts are absent**
 
 Run: `pwsh -NoProfile -File tests/verify-deploy-scripts.ps1`
 
 Expected: fail on missing scripts.
 
-- [ ] **Step 3: Implement consistent backup with fail-closed staging**
+- [x] **Step 3: Implement consistent backup with fail-closed staging**
 
 `backup.sh` verifies exact resolved root, free space, healthy database, and writable dedicated backup directory. It runs one non-parallel `pg_dump --format=custom --no-owner --no-acl`, writes `.partial`, runs `pg_restore --list`, computes SHA-256, writes a JSON manifest without secrets, fsyncs, renames atomically, and leaves previous successful dumps untouched on failure.
 
-- [ ] **Step 4: Implement a real disposable restore test**
+- [x] **Step 4: Implement a real disposable restore test**
 
 `restore-verify.sh` validates the manifest/hash, creates a randomly named validation database inside the same isolated PostgreSQL container, restores the dump, runs schema/table/row-count/invariant checks, records the verdict, and drops only that exact validation database after checking its generated prefix. It must never restore over the live database.
 
-- [ ] **Step 5: Document project-specific Cloud Sync settings**
+- [x] **Step 5: Document project-specific Cloud Sync settings**
 
 The Baidu task runbook requires a new task owned by a dedicated non-personal DSM account, local project reports/backup paths only, `Upload local changes only`, `Do not remove destination data when source is removed`, client-side encryption, key export, two offline key copies, no editing of `@SynologyCloudSync`, and no changes to existing tasks. The monthly DSM task runs backup plus restore verification; pre-upgrade backup is called by deployment regardless of schedule.
 
-- [ ] **Step 6: Run safety checks**
+- [x] **Step 6: Run safety checks**
 
 Run: `pwsh -NoProfile -File tests/verify-deploy-scripts.ps1`
 
 Expected: pass. Actual dump/restore remains unproven until PostgreSQL/NAS execution.
 
-- [ ] **Step 7: Commit backup and recovery controls**
+- [x] **Step 7: Commit backup and recovery controls**
 
 Record custom-format dump, atomic manifest, real disposable restore design, monthly/pre-upgrade cadence, and Cloud Sync non-interference.
 
