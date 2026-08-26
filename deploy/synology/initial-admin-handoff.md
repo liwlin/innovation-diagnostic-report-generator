@@ -33,13 +33,49 @@ project_root=/volume1/docker/makerseed-diagnostic
 initial_password_file=$project_root/secrets/initial_admin_password
 state_file=$project_root/deployment-state/current.env
 state_hash=$project_root/deployment-state/current.env.sha256
+tmp_state=$project_root/deployment-state/current.env.handoff
+tmp_hash=$project_root/deployment-state/current.env.sha256.handoff
+state_backup=$project_root/deployment-state/current.env.before-handoff
+hash_backup=$project_root/deployment-state/current.env.sha256.before-handoff
+
+rollback_state() {
+  if [ -f "$state_backup" ] && [ -f "$hash_backup" ]; then
+    mv "$state_backup" "$state_file"
+    mv "$hash_backup" "$state_hash"
+  fi
+}
+trap rollback_state EXIT HUP INT TERM
+
+[ -f "$state_file" ] && [ ! -L "$state_file" ]
+[ -f "$state_hash" ] && [ ! -L "$state_hash" ]
+[ -f "$initial_password_file" ] && [ ! -L "$initial_password_file" ]
+(cd "$project_root/deployment-state" && sha256sum -c "$state_hash")
+pending_count=$(grep -c '^INITIAL_ADMIN_HANDOFF=pending$' "$state_file")
+[ "$pending_count" -eq 1 ]
+
+awk '
+  /^INITIAL_ADMIN_HANDOFF=/ {
+    if (seen++) exit 1
+    print "INITIAL_ADMIN_HANDOFF=complete"
+    next
+  }
+  { print }
+  END { if (seen != 1) exit 1 }
+' "$state_file" >"$tmp_state"
+chmod 600 "$tmp_state"
+tmp_sha=$(sha256sum "$tmp_state" | awk '{print $1}')
+printf '%s  %s\n' "$tmp_sha" "$state_file" >"$tmp_hash"
+[ -s "$tmp_state" ] && [ -s "$tmp_hash" ]
+cp -p "$state_file" "$state_backup"
+cp -p "$state_hash" "$hash_backup"
+
 [ -f "$initial_password_file" ] && [ ! -L "$initial_password_file" ]
 rm -f "$initial_password_file"
-tmp_state=$project_root/deployment-state/current.env.handoff
-sed 's/^INITIAL_ADMIN_HANDOFF=.*/INITIAL_ADMIN_HANDOFF=complete/' "$state_file" >"$tmp_state"
-chmod 600 "$tmp_state"
+[ ! -e "$initial_password_file" ] && [ ! -L "$initial_password_file" ]
 mv "$tmp_state" "$state_file"
-sha256sum "$state_file" >"$state_hash"
+mv "$tmp_hash" "$state_hash"
+rm -f "$state_backup" "$hash_backup"
+trap - EXIT HUP INT TERM
 sync
 ```
 

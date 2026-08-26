@@ -215,7 +215,7 @@ else
   : "${SMOKE_TEST_PASSWORD_FILE:?SMOKE_TEST_PASSWORD_FILE is required}"
   require_safe_scalar SMOKE_ADMIN_USERNAME "$SMOKE_ADMIN_USERNAME" 80
   require_regular_secret_mode "$SMOKE_ADMIN_PASSWORD_FILE"
-  require_regular_secret_mode "$SMOKE_TEST_PASSWORD_FILE"
+  require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"
 fi
 compose up -d --no-deps --force-recreate app
 app_container=$(compose ps -q app)

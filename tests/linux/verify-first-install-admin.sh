@@ -13,6 +13,8 @@ APP_IMAGE=ghcr.io/liwlin/innovation-diagnostic-report-generator@sha256:111111111
 ADMIN_PASSWORD='AdminSecret-DoNotLeak-2026!'
 SMOKE_PASSWORD='SmokeSecret-DoNotLeak-2026!'
 RUN_MARKER=task7-first-admin-$$
+PROJECT_MARKER=.makerseed-first-admin-test-marker
+DOCKER_MARKER=.makerseed-first-admin-test-marker
 
 fail() {
   echo "FAIL: $*" >&2
@@ -37,17 +39,43 @@ require_cleanup_target() {
 cleanup_path() {
   target=$1
   require_cleanup_target "$target"
-  if [ -e "$target" ] || [ -L "$target" ]; then
-    if [ "$target" = "$PROJECT_ROOT" ]; then
-      [ -f "$TMP_DIR/project-root.marker" ] || fail "refusing cleanup of unmarked project root"
-      [ "$(cat "$TMP_DIR/project-root.marker")" = "$RUN_MARKER" ] || fail "refusing cleanup of marker not owned by this run"
-    fi
-    if [ "$target" = "$DOCKER_PARENT" ]; then
-      [ -f "$TMP_DIR/docker-parent.marker" ] || fail "refusing cleanup of unmarked docker parent"
-      [ "$(cat "$TMP_DIR/docker-parent.marker")" = "$RUN_MARKER" ] || fail "refusing cleanup of docker marker not owned by this run"
-    fi
-    rm -R "$target"
+  [ -e "$target" ] || [ -L "$target" ] || return 0
+  if [ "$target" = "$PROJECT_ROOT" ]; then
+    [ -f "$PROJECT_ROOT/$PROJECT_MARKER" ] || fail "refusing cleanup of unmarked project root"
+    [ "$(cat "$PROJECT_ROOT/$PROJECT_MARKER")" = "$RUN_MARKER" ] || fail "refusing cleanup of marker not owned by this run"
+    for child in "$PROJECT_ROOT"/* "$PROJECT_ROOT"/.[!.]* "$PROJECT_ROOT"/..?*; do
+      [ -e "$child" ] || [ -L "$child" ] || continue
+      child_name=$(basename "$child")
+      case "$child_name" in
+        data|backups|reports-staging|secrets|deployment-state|releases|current|.env|.deploy-lock|"$PROJECT_MARKER") ;;
+        *) fail "refusing cleanup of unknown project child: $child_name" ;;
+      esac
+    done
+    for child_name in data backups reports-staging secrets deployment-state releases current .env .deploy-lock "$PROJECT_MARKER"; do
+      child="$PROJECT_ROOT/$child_name"
+      if [ -e "$child" ] || [ -L "$child" ]; then
+        rm -R "$child"
+      fi
+    done
+    rmdir "$PROJECT_ROOT"
+    return 0
   fi
+  if [ "$target" = "$DOCKER_PARENT" ]; then
+    [ -f "$DOCKER_PARENT/$DOCKER_MARKER" ] || fail "refusing cleanup of unmarked docker parent"
+    [ "$(cat "$DOCKER_PARENT/$DOCKER_MARKER")" = "$RUN_MARKER" ] || fail "refusing cleanup of docker marker not owned by this run"
+    for child in "$DOCKER_PARENT"/* "$DOCKER_PARENT"/.[!.]* "$DOCKER_PARENT"/..?*; do
+      [ -e "$child" ] || [ -L "$child" ] || continue
+      child_name=$(basename "$child")
+      case "$child_name" in
+        "$DOCKER_MARKER") ;;
+        *) fail "refusing cleanup of unknown docker parent child: $child_name" ;;
+      esac
+    done
+    rm -f "$DOCKER_PARENT/$DOCKER_MARKER"
+    rmdir "$DOCKER_PARENT"
+    return 0
+  fi
+  rm -R "$target"
 }
 
 assert_ephemeral_runner() {
@@ -99,15 +127,15 @@ case "$command_name" in
   version) echo "v2.20.3" ;;
   ps)
     case "$*" in
-      *"-a -q db"*) [ -f "$PROJECT_ROOT/.fake-db-created" ] && echo db-container || true ;;
+      *"-a -q db"*) [ -f "$FAKE_STATE_DIR/db-created" ] && echo db-container || true ;;
       *"-q db"*) echo db-container ;;
       *"-q app"*) echo app-container ;;
     esac
     ;;
   up)
     case "$service_name" in
-      db) : >"$PROJECT_ROOT/.fake-db-created" ;;
-      app) : >"$PROJECT_ROOT/.fake-app-started" ;;
+      db) : >"$FAKE_STATE_DIR/db-created" ;;
+      app) : >"$FAKE_STATE_DIR/app-started" ;;
     esac
     ;;
   exec)
@@ -133,8 +161,8 @@ case "$command_name" in
     ;;
   run)
     case "$*" in
-      *"alembic -c /opt/app/server/alembic.ini upgrade head"*) : >"$PROJECT_ROOT/.fake-migrated" ;;
-      *"python -m makerseed_app.cli bootstrap-admin"*) : >"$PROJECT_ROOT/.fake-bootstrapped" ;;
+      *"alembic -c /opt/app/server/alembic.ini upgrade head"*) : >"$FAKE_STATE_DIR/migrated" ;;
+      *"python -m makerseed_app.cli bootstrap-admin"*) : >"$FAKE_STATE_DIR/bootstrapped" ;;
     esac
     ;;
 esac
@@ -188,7 +216,20 @@ case "$method $path" in
   "DELETE /api/evaluations/evaluation-id") status=204; body='' ;;
   "PATCH /api/admin/users/teacher-id") body='{"id":"teacher-id"}' ;;
 esac
-[ -z "$body_path" ] || grep -q 'DoNotLeak' "$body_path" || true
+if [ -n "$body_path" ]; then
+  case "$method $path" in
+    "POST /api/auth/login")
+      if grep -q '"username":"first-admin"' "$body_path"; then
+        grep -Fq "\"password\":\"$FAKE_EXPECTED_ADMIN_PASSWORD\"" "$body_path" || status=401
+      else
+        grep -Fq "\"password\":\"$FAKE_EXPECTED_TEST_PASSWORD\"" "$body_path" || status=401
+      fi
+      ;;
+    "POST /api/admin/users")
+      grep -Fq "\"password\":\"$FAKE_EXPECTED_TEST_PASSWORD\"" "$body_path" || status=401
+      ;;
+  esac
+fi
 if [ -n "$output" ]; then
   if [ "$output" != "/dev/null" ]; then
     printf '%s' "$body" >"$output"
@@ -216,8 +257,8 @@ copy_release_fixture() {
 
 prepare_project_root() {
   mkdir -p "$PROJECT_ROOT/data/postgres" "$PROJECT_ROOT/backups" "$PROJECT_ROOT/reports-staging" "$PROJECT_ROOT/secrets" "$PROJECT_ROOT/deployment-state"
-  printf '%s\n' "$RUN_MARKER" >"$TMP_DIR/project-root.marker"
-  printf '%s\n' "$RUN_MARKER" >"$TMP_DIR/docker-parent.marker"
+  printf '%s\n' "$RUN_MARKER" >"$PROJECT_ROOT/$PROJECT_MARKER"
+  printf '%s\n' "$RUN_MARKER" >"$DOCKER_PARENT/$DOCKER_MARKER"
   copy_release_fixture
   cat >"$PROJECT_ROOT/.env" <<EOF
 APP_IMAGE=$APP_IMAGE
@@ -241,11 +282,15 @@ write_install_passwords() {
 }
 
 run_deploy() {
+  smoke_admin_password_file=${RUN_SMOKE_ADMIN_PASSWORD_FILE:-$PROJECT_ROOT/secrets/initial_admin_password}
+  smoke_test_password_file=${RUN_SMOKE_TEST_PASSWORD_FILE:-$PROJECT_ROOT/secrets/smoke_test_password}
+  rm -f "$PROJECT_ROOT/$PROJECT_MARKER"
+  set +e
   BOOTSTRAP_ADMIN_USERNAME=first-admin \
   BOOTSTRAP_ADMIN_DISPLAY_NAME="First Admin" \
   SMOKE_ADMIN_USERNAME=first-admin \
-  SMOKE_ADMIN_PASSWORD_FILE=$PROJECT_ROOT/secrets/initial_admin_password \
-  SMOKE_TEST_PASSWORD_FILE=$PROJECT_ROOT/secrets/smoke_test_password \
+  SMOKE_ADMIN_PASSWORD_FILE=$smoke_admin_password_file \
+  SMOKE_TEST_PASSWORD_FILE=$smoke_test_password_file \
   PROJECT_ROOT=$PROJECT_ROOT \
   RELEASE_ROOT=$RELEASE_ROOT \
   RELEASE_ID=$RELEASE_ID \
@@ -258,7 +303,14 @@ run_deploy() {
   MIGRATION_COMPATIBILITY=backward-compatible \
   PATH="$FAKE_DOCKER_DIR:$PATH" \
   FAKE_DOCKER_LOG=$FAKE_DOCKER_LOG \
+  FAKE_STATE_DIR=$FAKE_STATE_DIR \
+  FAKE_EXPECTED_ADMIN_PASSWORD=$ADMIN_PASSWORD \
+  FAKE_EXPECTED_TEST_PASSWORD=$SMOKE_PASSWORD \
     "$PROJECT_DIR/deploy/scripts/deploy.sh"
+  deploy_status=$?
+  set -e
+  printf '%s\n' "$RUN_MARKER" >"$PROJECT_ROOT/$PROJECT_MARKER"
+  return "$deploy_status"
 }
 
 line_number() {
@@ -272,10 +324,17 @@ assert_ephemeral_runner
 TMP_DIR=$(mktemp -d)
 FAKE_DOCKER_DIR=$TMP_DIR/fake-bin
 FAKE_DOCKER_LOG=$TMP_DIR/docker.log
+FAKE_STATE_DIR=$TMP_DIR/fake-state
+mkdir -p "$FAKE_STATE_DIR"
 write_fake_commands "$FAKE_DOCKER_DIR" "$FAKE_DOCKER_LOG"
 trap 'cleanup_path "$PROJECT_ROOT"; cleanup_path "$DOCKER_PARENT"; cleanup_path "$TMP_DIR"' EXIT HUP INT TERM
 
 prepare_project_root
+printf 'unknown\n' >"$PROJECT_ROOT/unknown-child"
+if (cleanup_path "$PROJECT_ROOT") >/dev/null 2>&1; then
+  fail "cleanup accepted an unknown fixed-root child"
+fi
+rm -f "$PROJECT_ROOT/unknown-child"
 write_install_passwords
 run_deploy >/dev/null
 
@@ -294,7 +353,7 @@ fi
 [ -f "$PROJECT_ROOT/secrets/initial_admin_password" ] || fail "initial admin password was removed before handoff"
 [ ! -e "$PROJECT_ROOT/secrets/smoke_test_password" ] || fail "temporary smoke password was not removed after successful smoke"
 grep -q '^INITIAL_ADMIN_HANDOFF=pending$' "$PROJECT_ROOT/deployment-state/current.env" || fail "handoff state was not recorded as pending"
-rm -f "$PROJECT_ROOT"/.fake-db-created "$PROJECT_ROOT"/.fake-app-started "$PROJECT_ROOT"/.fake-migrated "$PROJECT_ROOT"/.fake-bootstrapped
+rm -f "$FAKE_STATE_DIR"/db-created "$FAKE_STATE_DIR"/app-started "$FAKE_STATE_DIR"/migrated "$FAKE_STATE_DIR"/bootstrapped
 
 write_install_passwords
 : >"$FAKE_DOCKER_LOG"
@@ -305,5 +364,28 @@ fi
 if grep -q 'DoNotLeak' "$FAKE_DOCKER_LOG"; then
   fail "password appeared in upgrade fake Docker/curl argv log"
 fi
+
+write_install_passwords
+printf '%s\n' 'WrongAdminSecret-DoNotLeak-2026!' >"$PROJECT_ROOT/secrets/wrong_admin_password"
+chmod 600 "$PROJECT_ROOT/secrets/wrong_admin_password"
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+: >"$FAKE_DOCKER_LOG"
+if RUN_SMOKE_ADMIN_PASSWORD_FILE=$PROJECT_ROOT/secrets/wrong_admin_password run_deploy >/dev/null 2>&1; then
+  fail "wrong admin smoke password file was accepted"
+fi
+after_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+[ "$before_state_hash" = "$after_state_hash" ] || fail "failed smoke committed deployment state"
+
+write_install_passwords
+printf '%s\n' "$SMOKE_PASSWORD" >"$PROJECT_ROOT/secrets/alternate_smoke_password"
+chmod 600 "$PROJECT_ROOT/secrets/alternate_smoke_password"
+before_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+: >"$FAKE_DOCKER_LOG"
+if RUN_SMOKE_TEST_PASSWORD_FILE=$PROJECT_ROOT/secrets/alternate_smoke_password run_deploy >/dev/null 2>&1; then
+  fail "alternate smoke password file was accepted"
+fi
+[ -f "$PROJECT_ROOT/secrets/alternate_smoke_password" ] || fail "alternate smoke password file was deleted"
+after_state_hash=$(sha256sum "$PROJECT_ROOT/deployment-state/current.env" | awk '{print $1}')
+[ "$before_state_hash" = "$after_state_hash" ] || fail "alternate smoke file failure committed deployment state"
 
 echo "PASS: first-install admin bootstrap and smoke credential behavior verified."

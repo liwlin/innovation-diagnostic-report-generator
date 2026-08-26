@@ -188,6 +188,18 @@ Assert-Condition ($smoke -match '--data-binary\s+@') 'Smoke must send JSON bodie
 Assert-Condition ($smoke -match 'json_escape') 'Smoke must JSON-escape credential and user-provided values.'
 Assert-Condition ($smoke -match 'chmod 600') 'Smoke temp request bodies must be mode 0600.'
 
+$handoffRunbookPath = Join-Path $projectRoot 'deploy/synology/initial-admin-handoff.md'
+Assert-Condition (Test-Path -LiteralPath $handoffRunbookPath -PathType Leaf) 'Initial admin handoff runbook is missing.'
+$handoffRunbook = Get-Content -LiteralPath $handoffRunbookPath -Raw -Encoding UTF8
+Assert-Condition ($handoffRunbook -match '\[ -f "\$state_file" \] && \[ ! -L "\$state_file" \]') 'Handoff cleanup must verify current.env is a regular non-symlink before editing.'
+Assert-Condition ($handoffRunbook -match 'sha256sum -c "\$state_hash"') 'Handoff cleanup must verify the current.env checksum before editing.'
+Assert-Condition ($handoffRunbook -match "grep -c '\^INITIAL_ADMIN_HANDOFF=pending\$'") 'Handoff cleanup must require exactly one pending handoff line.'
+Assert-Condition ($handoffRunbook -match 'tmp_hash=.*\.sha256\.handoff') 'Handoff cleanup must build a replacement checksum before committing state.'
+Assert-Condition ($handoffRunbook -match 'rm -f "\$initial_password_file"') 'Handoff cleanup must remove only the exact initial password file.'
+Assert-Condition ($handoffRunbook -match 'mv "\$tmp_state" "\$state_file"') 'Handoff cleanup must atomically replace state.'
+Assert-Condition ($handoffRunbook -match 'mv "\$tmp_hash" "\$state_hash"') 'Handoff cleanup must atomically replace checksum.'
+Assert-Condition ($handoffRunbook -match 'rollback_state\(\)') 'Handoff cleanup must define a rollback path for state/hash replacement.'
+
 $isWindowsHost = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
     [System.Runtime.InteropServices.OSPlatform]::Windows
 )
