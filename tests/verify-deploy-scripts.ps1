@@ -118,9 +118,11 @@ Assert-Condition ($deploy -match 'MIGRATION_COMPATIBILITY') 'Deploy must require
 Assert-Condition ($deploy -match 'SCHEMA_COMPATIBLE=%s') 'Deploy state must persist schema compatibility for rollback.'
 Assert-Condition ($deploy -match 'bootstrap.*password') 'Deploy must remove temporary bootstrap password material after successful smoke.'
 Assert-Condition ($deploy -match 'current\.env exists but is not a regular non-symlink file') 'Deploy must fail closed when current.env exists but is unsafe.'
+Assert-Condition ($deploy -match '\[ -e "\$previous_state" \] \|\| \[ -L "\$previous_state" \]') 'Deploy must treat a broken current.env symlink as existing unsafe state.'
 Assert-Condition ($deploy -match 'detect_existing_db_footprint') 'Deploy must check for existing DB evidence before treating a run as first install.'
 Assert-Condition ($deploy -match 'compose ps -a -q db') 'Deploy must inspect the exact project db container before first-install DB creation.'
 Assert-Condition ($deploy -match 'data_postgres_has_entries') 'Deploy must inspect persisted postgres data before first-install DB creation.'
+Assert-Condition ($deploy -match '\[ -e "\$child" \] \|\| \[ -L "\$child" \]') 'Deploy must count a broken symlink child in data/postgres as existing DB footprint.'
 Assert-Condition ($deploy -match 'refusing first install over existing database evidence') 'Deploy must require an audited baseline instead of reconciling existing DB evidence.'
 
 $rollback = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/rollback.sh') -Raw -Encoding UTF8

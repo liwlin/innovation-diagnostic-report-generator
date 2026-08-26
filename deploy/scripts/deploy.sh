@@ -43,7 +43,7 @@ previous_image=''
 previous_version=''
 previous_db_image=''
 previous_db_config_hash=''
-if [ -e "$previous_state" ]; then
+if [ -e "$previous_state" ] || [ -L "$previous_state" ]; then
   if [ ! -f "$previous_state" ] || [ -L "$previous_state" ]; then
     echo "ABORT: current.env exists but is not a regular non-symlink file; capture an audited baseline before deployment" >&2
     exit 81
@@ -60,7 +60,9 @@ data_postgres_has_entries() {
   data_dir="$PROJECT_ROOT/data/postgres"
   [ -d "$data_dir" ] || return 1
   for child in "$data_dir"/* "$data_dir"/.[!.]* "$data_dir"/..?*; do
-    [ -e "$child" ] && return 0
+    if [ -e "$child" ] || [ -L "$child" ]; then
+      return 0
+    fi
   done
   return 1
 }
