@@ -10,6 +10,13 @@ require_exact_project_root
 : "${APP_VERSION:?APP_VERSION is required}"
 : "${APP_IMAGE:?APP_IMAGE is required}"
 : "${PREFLIGHT_NONCE:?PREFLIGHT_NONCE is required}"
+: "${MIGRATION_COMPATIBILITY:?MIGRATION_COMPATIBILITY is required}"
+
+case "$MIGRATION_COMPATIBILITY" in
+  backward-compatible) schema_compatible=true ;;
+  incompatible) schema_compatible=false ;;
+  *) echo "ABORT: MIGRATION_COMPATIBILITY must be backward-compatible or incompatible" >&2; exit 80 ;;
+esac
 
 "$SCRIPT_DIR/preflight.sh" >/dev/null
 
@@ -57,8 +64,8 @@ if [ "$previous_exists" -eq 1 ]; then
   "$SCRIPT_DIR/restore-verify.sh" --backup "$backup_file" >/dev/null
 fi
 
-printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nBACKUP_FILE=%s\nPREVIOUS_RELEASE_ROOT=%s\nPREVIOUS_APP_IMAGE=%s\nPREVIOUS_APP_VERSION=%s\n' \
-  "$RELEASE_ROOT" "$APP_IMAGE" "$APP_VERSION" "$backup_file" \
+printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nSCHEMA_COMPATIBLE=%s\nBACKUP_FILE=%s\nPREVIOUS_RELEASE_ROOT=%s\nPREVIOUS_APP_IMAGE=%s\nPREVIOUS_APP_VERSION=%s\n' \
+  "$RELEASE_ROOT" "$APP_IMAGE" "$APP_VERSION" "$schema_compatible" "$backup_file" \
   "$previous_release" "$previous_image" "$previous_version" >"$pending_state"
 chmod 600 "$pending_state"
 sha256sum "$pending_state" >"$pending_state.sha256"

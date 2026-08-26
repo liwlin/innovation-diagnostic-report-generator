@@ -56,8 +56,18 @@ Assert-Condition ($preflight -match 'MIN_COMPOSE_VERSION') 'Preflight must enfor
 Assert-Condition ($preflight -match 'stat -c %a') 'Preflight must validate secret file modes.'
 Assert-Condition ($preflight -match 'REPORT_ROOT') 'Preflight must validate the declared report mount root.'
 Assert-Condition ($preflight -match 'readlink -f "\$REPORT_ROOT"') 'Preflight must resolve declared mounts before approval.'
+foreach ($bindSource in @('data/postgres', 'backups', 'postgres-init/10-create-runtime-role.sh')) {
+    Assert-Condition ($preflight -like "*$bindSource*") "Preflight must validate bind source: $bindSource"
+}
+Assert-Condition ($preflight -match 'canonical_bind_source') 'Preflight must canonicalize every declared bind source.'
+Assert-Condition ($preflight -match 'must not be a symbolic link') 'Preflight must reject symlinked bind sources.'
 Assert-Condition ($preflight -match '"nonce":"%s"') 'Preflight verdict must include the nonce for install-layout binding.'
 Assert-Condition ($preflight -match 'docker ps[^\r\n]*com\.docker\.compose\.project=makerseed-diagnostic') 'Preflight must check project container collisions.'
+Assert-Condition ($preflight -match 'docker ps[^\r\n]*publish=18081') 'Preflight must inspect the actual port 18081 owner.'
+Assert-Condition ($preflight -match 'com\.docker\.compose\.project\.working_dir') 'Preflight must verify the compose working directory for collisions.'
+foreach ($containerName in @('makerseed-diagnostic-app-1', 'makerseed-diagnostic-db-1')) {
+    Assert-Condition ($preflight -like "*$containerName*") "Preflight must inspect exact container ownership for $containerName"
+}
 
 $layout = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/install-layout.sh') -Raw -Encoding UTF8
 Assert-Condition ($layout -match 'PREFLIGHT_NONCE') 'Install layout must require the successful preflight nonce.'
@@ -78,6 +88,8 @@ Assert-Condition ($smokePosition -gt $appUpPosition) 'Deploy must smoke-test aft
 Assert-Condition ($deploy -match 'rollback\.sh') 'Deploy does not invoke rollback on failure.'
 Assert-Condition ($deploy -match 'docker image inspect "\$APP_IMAGE"') 'Deploy must verify the requested digest-pinned app image.'
 Assert-Condition ($deploy -match 'APP_IMAGE=%s') 'Deploy state must persist the requested digest.'
+Assert-Condition ($deploy -match 'MIGRATION_COMPATIBILITY') 'Deploy must require an explicit migration compatibility contract.'
+Assert-Condition ($deploy -match 'SCHEMA_COMPATIBLE=%s') 'Deploy state must persist schema compatibility for rollback.'
 Assert-Condition ($deploy -match 'bootstrap.*password') 'Deploy must remove temporary bootstrap password material after successful smoke.'
 
 $rollback = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/scripts/rollback.sh') -Raw -Encoding UTF8
@@ -97,6 +109,11 @@ Assert-Condition ($smoke -match 'mkseed_csrf') 'Smoke must extract and reuse the
 Assert-Condition ($smoke -match 'csrf_failed') 'Smoke must prove CSRF rejection before authenticated mutation.'
 Assert-Condition ($smoke -match 'SMOKE_TEST_PASSWORD') 'Smoke must require a temporary test-account password.'
 Assert-Condition ($smoke -match 'permanent.*delete|DELETE') 'Smoke must remove test data through the application.'
+Assert-Condition ($smoke -notmatch 'curl[^\r\n]*(SMOKE_ADMIN_PASSWORD|SMOKE_TEST_PASSWORD)') 'Smoke must not place passwords in curl argv.'
+Assert-Condition ($smoke -notmatch '--data\s+.*(SMOKE_ADMIN_PASSWORD|SMOKE_TEST_PASSWORD)') 'Smoke must not send passwords through inline --data arguments.'
+Assert-Condition ($smoke -match '--data-binary\s+@') 'Smoke must send JSON bodies through files or stdin.'
+Assert-Condition ($smoke -match 'json_escape') 'Smoke must JSON-escape credential and user-provided values.'
+Assert-Condition ($smoke -match 'chmod 600') 'Smoke temp request bodies must be mode 0600.'
 
 $shell = 'C:\Users\lwl56\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\usr\bin\sh.exe'
 Assert-Condition (Test-Path -LiteralPath $shell) 'Git sh.exe is unavailable for script syntax checks.'

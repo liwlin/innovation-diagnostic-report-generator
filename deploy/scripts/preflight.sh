@@ -37,6 +37,50 @@ version_ge() {
     }'
 }
 
+canonical_bind_source() {
+  bind_path=$1
+  expected=$2
+  mode=$3
+  if [ -L "$bind_path" ]; then
+    echo "ABORT: bind source must not be a symbolic link: $bind_path" >&2
+    exit 59
+  fi
+  if [ -e "$bind_path" ]; then
+    resolved=$(readlink -f "$bind_path")
+  else
+    parent=$bind_path
+    suffix=''
+    while [ ! -e "$parent" ]; do
+      suffix="/$(basename "$parent")$suffix"
+      next_parent=$(dirname "$parent")
+      if [ "$next_parent" = "$parent" ]; then
+        echo "ABORT: bind source has no existing safe parent: $bind_path" >&2
+        exit 59
+      fi
+      parent=$next_parent
+    done
+    if [ -L "$parent" ]; then
+      echo "ABORT: bind source parent must not be a symbolic link: $parent" >&2
+      exit 59
+    fi
+    resolved_parent=$(readlink -f "$parent")
+    resolved="$resolved_parent$suffix"
+  fi
+  case "$mode" in
+    exact)
+      [ "$resolved" = "$expected" ] || { echo "ABORT: bind source escapes approved root: $bind_path" >&2; exit 59; }
+      ;;
+    prefix)
+      case "$resolved" in
+        "$expected"|"$expected"/*) ;;
+        *) echo "ABORT: bind source escapes approved root: $bind_path" >&2; exit 59 ;;
+      esac
+      ;;
+    *) echo "ABORT: invalid bind source validation mode" >&2; exit 59 ;;
+  esac
+  printf '%s\n' "$resolved"
+}
+
 if [ "$(uname -m)" != "x86_64" ]; then
   echo "ABORT: NAS architecture must be x86_64" >&2
   exit 50
@@ -84,22 +128,31 @@ if [ -z "$available_kb" ] || [ "$available_kb" -lt 2097152 ]; then
   exit 53
 fi
 
-if docker ps --format '{{.Ports}}' | grep -Eq '(^|[:.])18081->|127\.0\.0\.1:18081'; then
-  existing_project=$(docker ps --filter label=com.docker.compose.project=makerseed-diagnostic --format '{{.ID}}')
-  if [ -z "$existing_project" ]; then
-    echo "ABORT: loopback port 18081 is already used outside this project" >&2
+verify_container_owner() {
+  container_id=$1
+  purpose=$2
+  owner_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id" 2>/dev/null || true)
+  owner_dir=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$container_id" 2>/dev/null || true)
+  if [ "$owner_project" != "makerseed-diagnostic" ] || [ "$owner_dir" != "$PROJECT_ROOT" ]; then
+    echo "ABORT: $purpose is owned by another Compose project/root" >&2
     exit 54
   fi
-fi
-foreign_project_containers=$(docker ps -a --filter label=com.docker.compose.project=makerseed-diagnostic --format '{{.Names}} {{.Label "com.docker.compose.project.working_dir"}}' | awk -v root="$PROJECT_ROOT" '$2 != "" && $2 != root {print $1}')
-if [ -n "$foreign_project_containers" ]; then
-  echo "ABORT: Compose project name is already used by another root" >&2
-  exit 54
-fi
-if docker ps -a --format '{{.Names}}' | grep -Eq '^(makerseed-diagnostic[-_](app|db)[-_]?[0-9]*|makerseed-diagnostic-(app|db))$'; then
-  conflicting_names=$(docker ps -a --filter label=com.docker.compose.project=makerseed-diagnostic --format '{{.Names}}')
-  [ -n "$conflicting_names" ] || { echo "ABORT: app/db container names collide outside this project" >&2; exit 54; }
-fi
+}
+
+port_owners=$(docker ps --filter publish=18081 --format '{{.ID}}')
+for container_id in $port_owners; do
+  verify_container_owner "$container_id" "port 18081"
+done
+for expected_container_name in makerseed-diagnostic-app-1 makerseed-diagnostic-db-1; do
+  exact_container_ids=$(docker ps -a --filter "name=^/${expected_container_name}$" --format '{{.ID}}')
+  for container_id in $exact_container_ids; do
+    verify_container_owner "$container_id" "container $expected_container_name"
+  done
+done
+foreign_project_containers=$(docker ps -a --filter label=com.docker.compose.project=makerseed-diagnostic --format '{{.ID}}')
+for container_id in $foreign_project_containers; do
+  verify_container_owner "$container_id" "Compose project makerseed-diagnostic"
+done
 
 case "$APP_IMAGE" in
   *@sha256:????????????????????????????????????????????????????????????????) ;;
@@ -129,7 +182,11 @@ for secret_name in postgres_owner_password postgres_runtime_password database_ur
   esac
 done
 
+resolved_data=$(canonical_bind_source "$PROJECT_ROOT/data/postgres" "$PROJECT_ROOT/data/postgres" exact)
+resolved_backups=$(canonical_bind_source "$PROJECT_ROOT/backups" "$PROJECT_ROOT/backups" exact)
+resolved_init=$(canonical_bind_source "$RELEASE_ROOT/postgres-init/10-create-runtime-role.sh" "$RELEASE_ROOT/postgres-init/10-create-runtime-role.sh" exact)
 resolved_report=$(readlink -f "$REPORT_ROOT")
+resolved_report=$(canonical_bind_source "$REPORT_ROOT" "$APPROVED_REPORT_ROOT" exact)
 case "$resolved_report" in
   "$APPROVED_REPORT_ROOT") ;;
   *) echo "ABORT: REPORT_ROOT must resolve exactly to the approved File Station share" >&2; exit 59 ;;
@@ -141,6 +198,13 @@ for declared_mount in "$PROJECT_ROOT/data/postgres" "$PROJECT_ROOT/backups" "$RE
   case "$declared_mount" in
     "$PROJECT_ROOT"/data/postgres|"$PROJECT_ROOT"/backups|"$REPORT_ROOT"|"$RELEASE_ROOT"/postgres-init/10-create-runtime-role.sh) ;;
     *) echo "ABORT: declared mount is outside approved roots" >&2; exit 59 ;;
+  esac
+done
+
+for resolved_mount in "$resolved_data" "$resolved_backups" "$resolved_report" "$resolved_init"; do
+  case "$resolved_mount" in
+    "$PROJECT_ROOT"/data/postgres|"$PROJECT_ROOT"/backups|"$APPROVED_REPORT_ROOT"|"$RELEASE_ROOT"/postgres-init/10-create-runtime-role.sh) ;;
+    *) echo "ABORT: resolved mount is outside approved roots" >&2; exit 59 ;;
   esac
 done
 
