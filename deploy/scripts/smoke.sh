@@ -6,8 +6,10 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 
 require_exact_project_root
 : "${SMOKE_ADMIN_USERNAME:?SMOKE_ADMIN_USERNAME is required}"
-: "${SMOKE_ADMIN_PASSWORD:?SMOKE_ADMIN_PASSWORD is required}"
-: "${SMOKE_TEST_PASSWORD:?SMOKE_TEST_PASSWORD is required}"
+: "${SMOKE_ADMIN_PASSWORD_FILE:?SMOKE_ADMIN_PASSWORD_FILE is required}"
+: "${SMOKE_TEST_PASSWORD_FILE:?SMOKE_TEST_PASSWORD_FILE is required}"
+require_regular_secret_mode "$SMOKE_ADMIN_PASSWORD_FILE"
+require_regular_secret_mode "$SMOKE_TEST_PASSWORD_FILE"
 
 base_url=${SMOKE_BASE_URL:-http://127.0.0.1:18081}
 admin_cookie=$(mktemp)
@@ -45,6 +47,23 @@ require_json_scalar() {
       exit 72
       ;;
   esac
+}
+
+read_single_line_secret() {
+  secret_name=$1
+  secret_path=$2
+  line_count=$(wc -l <"$secret_path" | awk '{print $1}')
+  if [ "$line_count" -gt 1 ]; then
+    echo "ABORT: $secret_name must be a single line" >&2
+    exit 72
+  fi
+  IFS= read -r secret_value <"$secret_path" || secret_value=''
+  secret_value=${secret_value%}
+  if [ "${#secret_value}" -lt 12 ]; then
+    echo "ABORT: $secret_name must contain at least 12 characters" >&2
+    exit 72
+  fi
+  printf '%s' "$secret_value"
 }
 
 write_json_body() {
@@ -135,6 +154,8 @@ if [ "$unauthorized" != "401" ]; then
 fi
 
 require_json_scalar SMOKE_ADMIN_USERNAME "$SMOKE_ADMIN_USERNAME"
+SMOKE_ADMIN_PASSWORD=$(read_single_line_secret SMOKE_ADMIN_PASSWORD_FILE "$SMOKE_ADMIN_PASSWORD_FILE")
+SMOKE_TEST_PASSWORD=$(read_single_line_secret SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE")
 require_json_scalar SMOKE_ADMIN_PASSWORD "$SMOKE_ADMIN_PASSWORD"
 require_json_scalar SMOKE_TEST_PASSWORD "$SMOKE_TEST_PASSWORD"
 admin_username_json=$(json_escape "$SMOKE_ADMIN_USERNAME")

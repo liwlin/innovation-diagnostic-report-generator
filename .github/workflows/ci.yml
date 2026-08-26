@@ -75,6 +75,8 @@ jobs:
         run: pwsh -NoProfile -File tests/verify-deploy-scripts.ps1
       - name: Verify bootstrap preflight protocol
         run: sudo env MKSEED_EPHEMERAL_VOLUME1_TEST=1 sh tests/linux/verify-bootstrap-preflight.sh
+      - name: Verify first-install admin protocol
+        run: sudo env MKSEED_EPHEMERAL_VOLUME1_TEST=1 sh tests/linux/verify-first-install-admin.sh
 
   secret-scan:
     name: Secret scan

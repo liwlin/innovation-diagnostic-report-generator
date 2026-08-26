@@ -130,9 +130,11 @@ $migratePosition = $deploy.IndexOf('migrate.sh')
 $appUpPosition = $deploy.IndexOf('compose up -d --no-deps --force-recreate app')
 $dbUpPosition = $deploy.IndexOf('compose up -d db')
 $smokePosition = $deploy.IndexOf('smoke.sh')
+$bootstrapPosition = $deploy.IndexOf('bootstrap-admin')
 Assert-Condition ($backupPosition -ge 0 -and $backupPosition -lt $migratePosition) 'Deploy must back up before migration.'
 Assert-Condition ($verifyPosition -gt $backupPosition -and $verifyPosition -lt $migratePosition) 'Deploy must restore-verify before migration.'
 Assert-Condition ($appUpPosition -gt $migratePosition) 'Deploy must start only the app after migration.'
+Assert-Condition ($bootstrapPosition -gt $migratePosition -and $bootstrapPosition -lt $appUpPosition) 'First-install admin bootstrap must run after migration and before app startup.'
 Assert-Condition ($dbUpPosition -lt 0 -or $dbUpPosition -gt $backupPosition) 'Upgrade deployment must not start/reconcile db before backup.'
 Assert-Condition ($deploy -match 'previous_exists.*-eq 0') 'Deploy must separate first-install database creation from upgrade handling.'
 Assert-Condition ($deploy -match 'verify_existing_db_state') 'Deploy must verify existing DB identity, health, and persisted state before upgrade backup.'
@@ -146,7 +148,12 @@ Assert-Condition ($deploy -notmatch 'docker load') 'Deploy must not load image t
 Assert-Condition ($deploy -match 'APP_IMAGE=%s') 'Deploy state must persist the requested digest.'
 Assert-Condition ($deploy -match 'MIGRATION_COMPATIBILITY') 'Deploy must require an explicit migration compatibility contract.'
 Assert-Condition ($deploy -match 'SCHEMA_COMPATIBLE=%s') 'Deploy state must persist schema compatibility for rollback.'
-Assert-Condition ($deploy -match 'bootstrap.*password') 'Deploy must remove temporary bootstrap password material after successful smoke.'
+Assert-Condition ($deploy -match 'INITIAL_ADMIN_PASSWORD_FILE') 'Deploy must read the initial admin credential only from the exact first-install secret file path.'
+Assert-Condition ($deploy -match 'SMOKE_TEST_PASSWORD_FILE') 'Deploy must read smoke credentials only from password file paths.'
+Assert-Condition ($deploy -match 'SMOKE_ADMIN_PASSWORD_FILE=.*INITIAL_ADMIN_PASSWORD_FILE') 'First install must pass the initial admin password file to smoke without reading it.'
+Assert-Condition ($deploy -match 'INITIAL_ADMIN_HANDOFF=pending') 'Deploy state must record pending initial admin handoff without credential material.'
+Assert-Condition ($deploy -match 'rm -f "\$SMOKE_TEST_PASSWORD_FILE"') 'Deploy must remove only the exact temporary smoke-test password file after successful smoke.'
+Assert-Condition ($deploy -notmatch 'rm -f "\$INITIAL_ADMIN_PASSWORD_FILE"') 'Deploy must not remove the preserved initial admin password automatically.'
 Assert-Condition ($deploy -match 'current\.env exists but is not a regular non-symlink file') 'Deploy must fail closed when current.env exists but is unsafe.'
 Assert-Condition ($deploy -match '\[ -e "\$previous_state" \] \|\| \[ -L "\$previous_state" \]') 'Deploy must treat a broken current.env symlink as existing unsafe state.'
 Assert-Condition ($deploy -match 'detect_existing_db_footprint') 'Deploy must check for existing DB evidence before treating a run as first install.'
@@ -170,7 +177,10 @@ foreach ($token in @('/api/health', '/api/session', '/api/auth/login', '/api/adm
 Assert-Condition ($smoke -match 'SMOKE_ADMIN_USERNAME') 'Smoke must use an existing admin account to create a temporary test account.'
 Assert-Condition ($smoke -match 'mkseed_csrf') 'Smoke must extract and reuse the CSRF cookie.'
 Assert-Condition ($smoke -match 'csrf_failed') 'Smoke must prove CSRF rejection before authenticated mutation.'
-Assert-Condition ($smoke -match 'SMOKE_TEST_PASSWORD') 'Smoke must require a temporary test-account password.'
+Assert-Condition ($smoke -match 'SMOKE_ADMIN_PASSWORD_FILE') 'Smoke must read the admin password from a password file.'
+Assert-Condition ($smoke -match 'SMOKE_TEST_PASSWORD_FILE') 'Smoke must read the temporary test-account password from a password file.'
+Assert-Condition ($smoke -notmatch '(?m)^\s*:\s*"\$\{SMOKE_ADMIN_PASSWORD:') 'Smoke must not require inline admin password environment values.'
+Assert-Condition ($smoke -notmatch '(?m)^\s*:\s*"\$\{SMOKE_TEST_PASSWORD:') 'Smoke must not require inline test password environment values.'
 Assert-Condition ($smoke -match 'permanent.*delete|DELETE') 'Smoke must remove test data through the application.'
 Assert-Condition ($smoke -notmatch 'curl[^\r\n]*(SMOKE_ADMIN_PASSWORD|SMOKE_TEST_PASSWORD)') 'Smoke must not place passwords in curl argv.'
 Assert-Condition ($smoke -notmatch '--data\s+.*(SMOKE_ADMIN_PASSWORD|SMOKE_TEST_PASSWORD)') 'Smoke must not send passwords through inline --data arguments.'

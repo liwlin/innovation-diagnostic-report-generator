@@ -12,6 +12,7 @@ require_exact_project_root
 : "${APP_IMAGE:?APP_IMAGE is required}"
 : "${PREFLIGHT_NONCE:?PREFLIGHT_NONCE is required}"
 : "${MIGRATION_COMPATIBILITY:?MIGRATION_COMPATIBILITY is required}"
+: "${SECRETS_ROOT:?SECRETS_ROOT is required}"
 
 case "$MIGRATION_COMPATIBILITY" in
   backward-compatible) schema_compatible=true ;;
@@ -40,6 +41,7 @@ previous_image=''
 previous_version=''
 previous_db_image=''
 previous_db_config_hash=''
+previous_initial_admin_handoff=''
 if [ -e "$previous_state" ] || [ -L "$previous_state" ]; then
   if [ ! -f "$previous_state" ] || [ -L "$previous_state" ]; then
     echo "ABORT: current.env exists but is not a regular non-symlink file; capture an audited baseline before deployment" >&2
@@ -51,7 +53,36 @@ if [ -e "$previous_state" ] || [ -L "$previous_state" ]; then
   previous_version=$(sed -n 's/^APP_VERSION=//p' "$previous_state")
   previous_db_image=$(sed -n 's/^DB_IMAGE=//p' "$previous_state")
   previous_db_config_hash=$(sed -n 's/^DB_CONTAINER_CONFIG_HASH=//p' "$previous_state")
+  previous_initial_admin_handoff=$(sed -n 's/^INITIAL_ADMIN_HANDOFF=//p' "$previous_state")
 fi
+
+require_safe_scalar() {
+  value_name=$1
+  value=$2
+  max_length=$3
+  if [ -z "$value" ] || [ "${#value}" -gt "$max_length" ]; then
+    echo "ABORT: $value_name is missing or too long" >&2
+    exit 83
+  fi
+  case "$value" in
+    *"
+"*|*""*|*"	"*)
+      echo "ABORT: $value_name must not contain control characters" >&2
+      exit 83
+      ;;
+  esac
+}
+
+require_exact_secret_file() {
+  value_name=$1
+  value=$2
+  expected=$3
+  if [ "$value" != "$expected" ]; then
+    echo "ABORT: $value_name must be exactly $expected" >&2
+    exit 83
+  fi
+  require_regular_secret_mode "$value"
+}
 
 data_postgres_has_entries() {
   data_dir="$PROJECT_ROOT/data/postgres"
@@ -121,6 +152,20 @@ if [ "$previous_exists" -eq 0 ]; then
     echo "ABORT: refusing first install over existing database evidence; capture an audited baseline before deployment" >&2
     exit 81
   fi
+  : "${BOOTSTRAP_ADMIN_USERNAME:?BOOTSTRAP_ADMIN_USERNAME is required for first install}"
+  : "${BOOTSTRAP_ADMIN_DISPLAY_NAME:?BOOTSTRAP_ADMIN_DISPLAY_NAME is required for first install}"
+  require_safe_scalar BOOTSTRAP_ADMIN_USERNAME "$BOOTSTRAP_ADMIN_USERNAME" 80
+  require_safe_scalar BOOTSTRAP_ADMIN_DISPLAY_NAME "$BOOTSTRAP_ADMIN_DISPLAY_NAME" 120
+  case "$BOOTSTRAP_ADMIN_USERNAME" in
+    [a-z0-9][a-z0-9._-]*) ;;
+    *) echo "ABORT: BOOTSTRAP_ADMIN_USERNAME is invalid" >&2; exit 83 ;;
+  esac
+  INITIAL_ADMIN_PASSWORD_FILE=${INITIAL_ADMIN_PASSWORD_FILE:-$SECRETS_ROOT/initial_admin_password}
+  SMOKE_TEST_PASSWORD_FILE=${SMOKE_TEST_PASSWORD_FILE:-$SECRETS_ROOT/smoke_test_password}
+  require_exact_secret_file INITIAL_ADMIN_PASSWORD_FILE "$INITIAL_ADMIN_PASSWORD_FILE" "$SECRETS_ROOT/initial_admin_password"
+  require_exact_secret_file SMOKE_TEST_PASSWORD_FILE "$SMOKE_TEST_PASSWORD_FILE" "$SECRETS_ROOT/smoke_test_password"
+  SMOKE_ADMIN_USERNAME=${SMOKE_ADMIN_USERNAME:-$BOOTSTRAP_ADMIN_USERNAME}
+  SMOKE_ADMIN_PASSWORD_FILE=$INITIAL_ADMIN_PASSWORD_FILE
   compose up -d db
   db_container=$(compose ps -q db)
   attempt=0
@@ -133,10 +178,16 @@ fi
 db_container=$(compose ps -q db)
 db_image=$(docker inspect --format '{{.Config.Image}}' "$db_container")
 db_container_config_hash=$(db_config_hash "$db_container")
+initial_admin_handoff=$previous_initial_admin_handoff
+if [ "$previous_exists" -eq 0 ]; then
+  initial_admin_handoff=pending
+elif [ -z "$initial_admin_handoff" ]; then
+  initial_admin_handoff=unknown
+fi
 
-printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nDB_IMAGE=%s\nDB_CONTAINER_CONFIG_HASH=%s\nSCHEMA_COMPATIBLE=%s\nBACKUP_FILE=%s\nPREVIOUS_RELEASE_ROOT=%s\nPREVIOUS_APP_IMAGE=%s\nPREVIOUS_APP_VERSION=%s\n' \
+printf 'RELEASE_ROOT=%s\nAPP_IMAGE=%s\nAPP_VERSION=%s\nDB_IMAGE=%s\nDB_CONTAINER_CONFIG_HASH=%s\nSCHEMA_COMPATIBLE=%s\nBACKUP_FILE=%s\nPREVIOUS_RELEASE_ROOT=%s\nPREVIOUS_APP_IMAGE=%s\nPREVIOUS_APP_VERSION=%s\nINITIAL_ADMIN_HANDOFF=%s\n' \
   "$RELEASE_ROOT" "$APP_IMAGE" "$APP_VERSION" "$db_image" "$db_container_config_hash" "$schema_compatible" "$backup_file" \
-  "$previous_release" "$previous_image" "$previous_version" >"$pending_state"
+  "$previous_release" "$previous_image" "$previous_version" "$initial_admin_handoff" >"$pending_state"
 chmod 600 "$pending_state"
 sha256sum "$pending_state" >"$pending_state.sha256"
 
@@ -151,6 +202,21 @@ rollback_on_error() {
 trap rollback_on_error EXIT HUP INT TERM
 
 "$SCRIPT_DIR/migrate.sh"
+if [ "$previous_exists" -eq 0 ]; then
+  compose run --rm --no-deps \
+    -v "$INITIAL_ADMIN_PASSWORD_FILE:/run/bootstrap/initial_admin_password:ro" \
+    app python -m makerseed_app.cli bootstrap-admin \
+      --username "$BOOTSTRAP_ADMIN_USERNAME" \
+      --display-name "$BOOTSTRAP_ADMIN_DISPLAY_NAME" \
+      --password-file /run/bootstrap/initial_admin_password
+else
+  : "${SMOKE_ADMIN_USERNAME:?SMOKE_ADMIN_USERNAME is required}"
+  : "${SMOKE_ADMIN_PASSWORD_FILE:?SMOKE_ADMIN_PASSWORD_FILE is required}"
+  : "${SMOKE_TEST_PASSWORD_FILE:?SMOKE_TEST_PASSWORD_FILE is required}"
+  require_safe_scalar SMOKE_ADMIN_USERNAME "$SMOKE_ADMIN_USERNAME" 80
+  require_regular_secret_mode "$SMOKE_ADMIN_PASSWORD_FILE"
+  require_regular_secret_mode "$SMOKE_TEST_PASSWORD_FILE"
+fi
 compose up -d --no-deps --force-recreate app
 app_container=$(compose ps -q app)
 attempt=0
@@ -159,13 +225,12 @@ until [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}
   [ "$attempt" -lt 60 ] || { echo "ABORT: app health timeout" >&2; exit 82; }
   sleep 2
 done
-"$SCRIPT_DIR/smoke.sh"
+SMOKE_ADMIN_USERNAME=$SMOKE_ADMIN_USERNAME \
+SMOKE_ADMIN_PASSWORD_FILE=$SMOKE_ADMIN_PASSWORD_FILE \
+SMOKE_TEST_PASSWORD_FILE=$SMOKE_TEST_PASSWORD_FILE \
+  "$SCRIPT_DIR/smoke.sh"
 
-for bootstrap_password in "$PROJECT_ROOT/secrets/bootstrap_password" "$PROJECT_ROOT/secrets/bootstrap-admin-password" "$PROJECT_ROOT/secrets/bootstrap_admin_password"; do
-  if [ -f "$bootstrap_password" ] && [ ! -L "$bootstrap_password" ]; then
-    rm -f "$bootstrap_password"
-  fi
-done
+rm -f "$SMOKE_TEST_PASSWORD_FILE"
 mv "$pending_state" "$previous_state"
 mv "$pending_state.sha256" "$previous_state.sha256"
 ln -sfn "$RELEASE_ROOT" "$PROJECT_ROOT/current"

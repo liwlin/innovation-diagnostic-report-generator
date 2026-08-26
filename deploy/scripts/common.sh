@@ -72,6 +72,16 @@ require_regular_secret() {
   fi
 }
 
+require_regular_secret_mode() {
+  secret_path=$1
+  require_regular_secret "$secret_path"
+  secret_mode=$(file_mode "$secret_path")
+  case "$secret_mode" in
+    400|600) ;;
+    *) echo "ABORT: required secret file must be mode 0400 or 0600" >&2; exit 21 ;;
+  esac
+}
+
 canonical_bind_source() {
   bind_path=$1
   expected=$2
