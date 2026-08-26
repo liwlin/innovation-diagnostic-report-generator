@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     environment: Environment = "development"
     app_version: str = "dev"
+    commit_sha: str = ""
     database_url: SecretStr = SecretStr("sqlite+pysqlite:///:memory:")
     session_secret: SecretStr | None = None
     bootstrap_secret: SecretStr | None = None

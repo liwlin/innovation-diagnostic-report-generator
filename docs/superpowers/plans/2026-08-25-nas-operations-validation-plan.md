@@ -301,25 +301,25 @@ Record exact-root guards, preflight non-mutation, backup-before-migration, healt
 - Consumes: Git commit/tag, locked dependencies, Dockerfile, all local tests, and GitHub OIDC/package permissions.
 - Produces: Pages artifact, immutable GHCR image/digest, SBOM, signed provenance where available, and release evidence.
 
-- [ ] **Step 1: Write failing workflow-policy tests**
+- [x] **Step 1: Write failing workflow-policy tests**
 
 Assert actions are pinned to full commit SHAs, permissions are least-privilege, PR CI has no package write, release only runs on `v*` tags or explicit dispatch, tests precede build/publish, image tags include semver and commit SHA, vulnerability scan blocks HIGH/CRITICAL unfixed findings, Pages artifact contains no server/secrets/deploy runtime data, and no workflow uses floating action tags.
 
-- [ ] **Step 2: Run policy tests and verify workflows are absent**
+- [x] **Step 2: Run policy tests and verify workflows are absent**
 
 Run: `pwsh -NoProfile -File tests/verify-workflows.ps1`
 
 Expected: fail on missing workflows.
 
-- [ ] **Step 3: Implement CI**
+- [x] **Step 3: Implement CI**
 
 CI runs Python tests/Ruff/mypy, Node tests, static Pages verifier, Compose/script/workflow verifiers, secret scan, and Docker build without push. Cache keys derive from `server/uv.lock`. No test uses production secrets.
 
-- [ ] **Step 4: Implement release**
+- [x] **Step 4: Implement release**
 
 Release rebuilds from the tagged commit, verifies all tests, publishes Pages local mode, pushes `ghcr.io/liwlin/innovation-diagnostic-report-generator:<semver>` and `:<commit-sha>`, records digest, emits SBOM/provenance, scans the final digest, and creates a release manifest with Pages commit and NAS image digest. Do not emit `latest`.
 
-- [ ] **Step 5: Run workflow and full local static checks**
+- [x] **Step 5: Run workflow and full local static checks**
 
 Run:
 

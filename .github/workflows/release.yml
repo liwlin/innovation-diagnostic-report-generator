@@ -1,0 +1,197 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver release version such as 0.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Re-verify release commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: server/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - name: Install uv
+        run: python -m pip install uv==0.9.26
+      - name: Run Python tests
+        run: uv run --project server pytest
+      - name: Run Ruff
+        run: uv run --project server ruff check
+      - name: Run mypy
+        run: uv run --project server mypy server/src/makerseed_app
+      - name: Run Node tests
+        run: node --test tests/js/*.test.js
+      - name: Run static and policy verifiers
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/verify-static-site.ps1
+          pwsh -NoProfile -File tests/verify-compose-security.ps1
+          pwsh -NoProfile -File tests/verify-deploy-scripts.ps1
+          pwsh -NoProfile -File tests/verify-workflows.ps1
+
+  pages-artifact:
+    name: Publish allowlisted Pages artifact
+    runs-on: ubuntu-latest
+    needs: [verify]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $semver = '${{ inputs.version }}'
+          } else {
+            $semver = '${{ github.ref_name }}'.TrimStart('v')
+          }
+          if ($semver -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Release version must be SemVer without a leading v: $semver"
+          }
+          "semver=$semver" >> $env:GITHUB_OUTPUT
+      - name: Build explicit local-mode Pages artifact
+        shell: pwsh
+        run: |
+          $artifact = Join-Path '${{ runner.temp }}' 'pages-artifact'
+          New-Item -ItemType Directory -Force -Path $artifact | Out-Null
+          Copy-Item -LiteralPath index.html -Destination $artifact
+          Copy-Item -LiteralPath support.js -Destination $artifact
+          Copy-Item -LiteralPath doc-page.js -Destination $artifact
+          Copy-Item -LiteralPath assets -Destination $artifact -Recurse
+          Copy-Item -LiteralPath shared -Destination $artifact -Recurse
+          Copy-Item -LiteralPath vendor -Destination $artifact -Recurse
+          $sourceName = '科创方向诊断报告生成器.dc.html'
+          Copy-Item -LiteralPath 科创方向诊断报告生成器.dc.html -Destination $artifact
+          $source = Get-Content -LiteralPath (Join-Path $artifact $sourceName) -Raw -Encoding UTF8
+          $marker = '<script src="./shared/runtime-config.js"></script>'
+          if (-not $source.Contains($marker)) { throw 'Editor runtime marker is missing.' }
+          $runtime = @{
+            storageMode = 'local'
+            apiBaseUrl = ''
+            appVersion = 'v${{ steps.version.outputs.semver }}'
+            commitSha = '${{ github.sha }}'
+          } | ConvertTo-Json -Compress
+          Set-Content -LiteralPath (Join-Path $artifact 'runtime-config.js') -Value "window.__MKSEED_RUNTIME__=Object.freeze($runtime);" -Encoding UTF8
+          $source = $source.Replace($marker, "<script src=""./runtime-config.js""></script>`n$marker")
+          Set-Content -LiteralPath (Join-Path $artifact $sourceName) -Value $source -Encoding UTF8
+          foreach ($forbidden in @('server', 'deploy', 'nas-web', '.env', 'secrets')) {
+            if (Test-Path -LiteralPath (Join-Path $artifact $forbidden)) {
+              throw "Forbidden Pages artifact path copied: $forbidden"
+            }
+          }
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: ${{ runner.temp }}/pages-artifact
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
+
+  publish-image:
+    name: Publish GHCR image, SBOM, provenance, and vulnerability gate
+    runs-on: ubuntu-latest
+    needs: [verify, pages-artifact]
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $semver = '${{ inputs.version }}'
+          } else {
+            $semver = '${{ github.ref_name }}'.TrimStart('v')
+          }
+          if ($semver -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Release version must be SemVer without a leading v: $semver"
+          }
+          "semver=$semver" >> $env:GITHUB_OUTPUT
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - name: Build and push immutable image tags
+        id: docker_build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ steps.version.outputs.semver }}
+            ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ github.sha }}
+          build-args: |
+            APP_VERSION=v${{ steps.version.outputs.semver }}
+            COMMIT_SHA=${{ github.sha }}
+      - name: Generate SBOM for final image digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ghcr.io/liwlin/innovation-diagnostic-report-generator@${{ steps.docker_build.outputs.digest }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          exit-code: '0'
+      - name: Scan final image digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ghcr.io/liwlin/innovation-diagnostic-report-generator@${{ steps.docker_build.outputs.digest }}
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-name: ghcr.io/liwlin/innovation-diagnostic-report-generator
+          subject-digest: ${{ steps.docker_build.outputs.digest }}
+          push-to-registry: true
+      - name: Write release manifest
+        shell: pwsh
+        run: |
+          $digest = '${{ steps.docker_build.outputs.digest }}'
+          $manifest = [ordered]@{
+            version = 'v${{ steps.version.outputs.semver }}'
+            commit = '${{ github.sha }}'
+            pages_commit = '${{ github.sha }}'
+            nas_image = "ghcr.io/liwlin/innovation-diagnostic-report-generator@$digest"
+            nas_image_digest = $digest
+            sbom = 'sbom.cdx.json'
+            tags = @(
+              'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ steps.version.outputs.semver }}',
+              'ghcr.io/liwlin/innovation-diagnostic-report-generator:${{ github.sha }}'
+            )
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath release-manifest.json -Encoding UTF8

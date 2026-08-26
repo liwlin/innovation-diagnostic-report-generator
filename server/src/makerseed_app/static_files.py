@@ -64,7 +64,7 @@ def register_static_routes(app: FastAPI, settings: Settings) -> None:
             "storageMode": "api",
             "apiBaseUrl": "",
             "appVersion": settings.app_version,
-            "commitSha": "",
+            "commitSha": settings.commit_sha,
         }
         serialized = json.dumps(payload, separators=(",", ":"))
         body = f"window.__MKSEED_RUNTIME__=Object.freeze({serialized});"
