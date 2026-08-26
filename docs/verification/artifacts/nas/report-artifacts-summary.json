@@ -1,0 +1,41 @@
+{
+  "scope": "sanitized DS220+ report artifact evidence",
+  "human_readable_path": "2026年/08月/2026-08-26_真机验收批次/真机测试学生-476129b3/13-13-24/",
+  "evaluation_id": "d1e3606e-414c-4f3e-86ae-85cd0e4bd60f",
+  "generation_id": "e39a54f0-723f-4f38-804e-d0dc880ccebe",
+  "files": [
+    {
+      "name": "真机测试学生-476129b3_8月26日_科创体验报告_无内联.pdf",
+      "variant": "parent",
+      "mime": "application/pdf",
+      "sha256": "ff7cc17faf94c2b48eeae826d3b0487949960b995e43166a43db5e564e9b1c8e"
+    },
+    {
+      "name": "真机测试学生-476129b3_8月26日_科创体验报告_无内联.png",
+      "variant": "parent",
+      "mime": "image/png",
+      "sha256": "1b7209650e5ae16095b4696d57c0fe8d0954801675577429a318296020815a5a"
+    },
+    {
+      "name": "真机测试学生-476129b3_8月26日_科创体验报告_含内联.pdf",
+      "variant": "internal",
+      "mime": "application/pdf",
+      "sha256": "78374e98830d36ef6b990f4eba5b7de713f3d30a96c21bf7121c842feb09df72"
+    },
+    {
+      "name": "真机测试学生-476129b3_8月26日_科创体验报告_含内联.png",
+      "variant": "internal",
+      "mime": "image/png",
+      "sha256": "fa59464cb8e76ea47636578654a0b1e7bc850681815333420adc02e7a1884781"
+    }
+  ],
+  "visual_checks": {
+    "pdf_page_size": "A4, one page",
+    "png_dimensions": "1747x2471",
+    "chinese_readable": "pass",
+    "no_clipping_or_overlap": "pass",
+    "parent_internal_separation": "pass",
+    "internal_watermark": "pass",
+    "post_generation_edit_did_not_mutate_history": "pass"
+  }
+}

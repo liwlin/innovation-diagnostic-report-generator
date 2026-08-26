@@ -1,0 +1,28 @@
+{
+  "scope": "sanitized DS220+ API and PostgreSQL hardware evidence",
+  "source": ".superpowers/sdd/2026-08-25-nas-operations-validation-plan/task-7-nas-evidence-brief.md and nas-api-flow-state-v0.1.7.json",
+  "version": "v0.1.7 flow data retained after v0.1.9 upgrade/rollback/roll-forward proof",
+  "evaluation_id": "d1e3606e-414c-4f3e-86ae-85cd0e4bd60f",
+  "generation_id": "e39a54f0-723f-4f38-804e-d0dc880ccebe",
+  "import_evaluation_id": "b31d31b9-75e6-40e8-9622-299c428efb33",
+  "post_generation_version": 6,
+  "checks": {
+    "postgres_runtime_role_audit_insert": "pass",
+    "postgres_audit_update_delete_ddl_denied": "pass",
+    "shared_search": "pass",
+    "shared_update": "pass",
+    "stale_conflict_409": "pass",
+    "trash_restore": "pass",
+    "ai_metadata_without_key": "pass",
+    "secret_field_rejection": "pass",
+    "admin_audit": "pass",
+    "emergency_import_preview_confirm": "pass",
+    "teacher_import_denial": "pass",
+    "version_display": "pass",
+    "four_artifacts": "pass",
+    "parent_internal_separation": "pass",
+    "immutable_generation_history": "pass",
+    "audit_secret_free": "pass"
+  },
+  "boundary": "API and PostgreSQL evidence is not authenticated browser proof."
+}

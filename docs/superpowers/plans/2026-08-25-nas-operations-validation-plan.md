@@ -374,23 +374,23 @@ Commit non-sensitive evidence and artifact summaries; do not commit downloaded i
 - Consumes: approved release digest, safe scripts, temporary source-restricted SSH authorization, DS220+ Docker/Compose, and exact isolated paths.
 - Produces: real container, database, report, backup/restore, restart, rollback, resource, port, mount, and non-impact evidence.
 
-- [ ] **Step 1: Establish temporary least-privilege automation access**
+- [x] **Step 1: Establish temporary least-privilege automation access**
 
 Generate a new ephemeral Ed25519 key locally. The user adds it to root `authorized_keys` with `from=<current workstation IP>`, `no-agent-forwarding`, `no-X11-forwarding`, `no-pty`, and `permitopen="127.0.0.1:18081"`. Never request or capture the NAS password. Record the public-key fingerprint, not the private key.
 
-- [ ] **Step 2: Capture a read-only before-state without reading company data**
+- [x] **Step 2: Capture a read-only before-state without reading company data**
 
 Record NAS kernel/architecture, free memory, target volume free space, Docker/Compose versions, exact target path existence, app port availability, and existing container names/status only. Do not enumerate shared-folder contents, volume contents, databases, container mounts, environment variables, or Cloud Sync task details.
 
-- [ ] **Step 3: Run preflight and verify zero writes on failure**
+- [x] **Step 3: Run preflight and verify zero writes on failure**
 
 Transfer signed/checksummed release content into `/volume1/.makerseed-diagnostic-bootstrap/<release-id>-<nonce>/release`, write its canonical sorted `release-tree.sha256`, run `PREFLIGHT_MODE=bootstrap preflight.sh`, and compare target path/container state before/after. Bootstrap must leave both `/volume1/docker` and `/volume1/docker/makerseed-diagnostic` absent when they start absent. Any existing project root, unsafe stage, manifest mismatch, extra file, collision, symlink, port use, or unverified digest stops before final-root writes. After binding, `install-layout.sh` may create exact `/volume1/docker` and `/volume1/docker/makerseed-diagnostic`; after secret creation, run `PREFLIGHT_MODE=runtime preflight.sh`; only runtime mode may approve `deploy.sh`.
 
-- [ ] **Step 4: Install exact isolated layout and secrets**
+- [x] **Step 4: Install exact isolated layout and secrets**
 
 Create only `/volume1/docker/makerseed-diagnostic` children. Generate database/session/bootstrap secrets on NAS with mode `0600`; do not print or transfer them back. For offline installs, load the proof-bound image tar only after `install-layout.sh` has succeeded and before `PREFLIGHT_MODE=runtime`; online installs may pull only the exact verified image digest in the same window. Run migrations and one-time admin bootstrap, then invalidate/remove bootstrap material.
 
-- [ ] **Step 5: Start two containers and inspect hardening**
+- [x] **Step 5: Start two containers and inspect hardening**
 
 Run `docker-compose -p makerseed-diagnostic --project-directory /volume1/docker/makerseed-diagnostic up -d app db`. Prove exactly two project containers, healthy state, app host binding `127.0.0.1:18081`, no PostgreSQL host port, expected read-only rootfs, user IDs, dropped capabilities, no-new-privileges, memory limits, `ulimits.nproc`, DS220+ one-core-per-service `cpuset` mapping (`db=0`, `app=1`), relative CPU shares, split networks (`backend` internal with `db` only there, `edge` non-internal with `app` only), stable project-root labels for newly recreated containers, manifest-bound legacy release labels for unrecreated containers, and only approved mounts. Do not use CFS `cpus` or rely on discarded `pids_limit` on this DSM kernel.
 
@@ -398,15 +398,17 @@ Run `docker-compose -p makerseed-diagnostic --project-directory /volume1/docker/
 
 Run PostgreSQL grant tests against the real `db`. Open an SSH tunnel limited to `127.0.0.1:18081`, then run browser flows for admin/two teachers, cross-teacher search/edit, 409 conflict, recycle/restore, admin permanent delete, audit, AI metadata without key, emergency import, and version display.
 
-- [ ] **Step 7: Generate and inspect real NAS artifacts**
+**Status:** PostgreSQL grants and API workflow are complete. Authenticated browser login and credential-driven UI flows remain pending user action-time approval.
+
+- [x] **Step 7: Generate and inspect real NAS artifacts**
 
 Generate four reports from non-sensitive fixture data. Verify exact names, readable Chinese, internal watermark, parent-data separation, hashes, MIME, immutable history, safe human-readable directory, app download, and visibility in the project report path. Confirm no container can resolve a path outside approved roots.
 
-- [ ] **Step 8: Prove restart recovery, monthly backup, and real restore**
+- [x] **Step 8: Prove restart recovery, monthly backup, and real restore**
 
 Queue a generation, restart only the app, and prove recovery. Run `backup.sh`, verify manifest/hash, run `restore-verify.sh` into a disposable database, and compare invariant counts. Keep the successful encrypted-ready backup in project staging; do not edit any existing Cloud Sync task.
 
-- [ ] **Step 9: Prove update and rollback**
+- [x] **Step 9: Prove update and rollback**
 
 Deploy a distinct signed test build or previous verified version, observe pre-update backup, health/smoke gate, and version change, then run manual rollback from exact `deployment-state/current.env` and verify prior version/data, `.env`, canonical `current.env.sha256`, `deployment-state/current.env`, and `current` symlink are coherent. PostgreSQL remains running through ordinary app rollback, and deploy-failure rollback from `pending.env` remains deploy-state-owned.
 
@@ -414,17 +416,25 @@ Deploy a distinct signed test build or previous verified version, observe pre-up
 
 Create the exact dedicated encrypted report share and read-only teacher group after obtaining the teacher DSM usernames; create a new LAN-only DSM HTTPS reverse proxy to loopback. Create a new project-only Cloud Sync task and upload a non-sensitive encrypted fixture, then verify decryptability using the exported key copy. Existing tasks are read-only comparison targets and are not edited.
 
+**Status:** Pending user approval, exact DSM teacher usernames, DSM/File Station/reverse proxy interaction, and project-only Cloud Sync account interaction. Existing Cloud Sync tasks remain untouched.
+
 - [ ] **Step 11: Capture after-state and prove company-data non-impact**
 
 Compare existing container names/status, DSM network/QuickConnect state, and target volume free space to the before-state. Inspect only this project's mounts and paths. State whether any unrelated container restarted or changed; expected result is none. Do not hash or inspect company files as a means of proof.
+
+**Status:** Partial. Before-state, project container count, isolated project resources, and no-company-data boundary are documented; final after-state remains pending until DSM/browser/Cloud Sync and access-removal steps finish.
 
 - [ ] **Step 12: Remove temporary access and sensitive test material**
 
 Remove the exact ephemeral authorized-key line, delete the local private/public key files, verify key login is rejected, remove non-sensitive test accounts/records through the app, close the SSH tunnel, and preserve only the approved production service, reports, encrypted backup, and non-secret evidence.
 
+**Status:** Pending. Tunnel is currently closed, but ephemeral authorized key/local key files, test accounts/records, temporary password files, and initial-admin handoff cleanup remain until authorized final validation is complete.
+
 - [ ] **Step 13: Record hardware verdict and commit evidence**
 
 `nas-hardware.md` separates verified facts from limitations and includes commands/output summaries, container IDs/digests, version, timestamps, test results, artifact hashes, backup/restore ID, restart/rollback results, resource peaks, and access-removal proof. `nas-impact-audit.md` lists exact touched paths/resources and confirms unrelated state. Commit only sanitized evidence.
+
+**Status:** Partial. Sanitized `nas-hardware.md`, `nas-impact-audit.md`, and artifact summaries are recorded. Access-removal proof and final after-state are pending, so Task 7 remains incomplete.
 
 ## Task 8: Requirement-by-Requirement Completion Audit
 

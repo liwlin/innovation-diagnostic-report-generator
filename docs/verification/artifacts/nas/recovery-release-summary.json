@@ -1,0 +1,41 @@
+{
+  "scope": "sanitized DS220+ restart, backup, restore, upgrade, rollback, and roll-forward evidence",
+  "final_version": "v0.1.9",
+  "final_commit": "a71f633ff081509c0828aa4f474ddd125340f7a5",
+  "ci_run": 32991925992,
+  "release_run": 32992282324,
+  "release_tree_sha256": "a86200f484274b9e9d68d675411a9318cd233fe45c4178874757ae159e48cb21",
+  "app_image": "ghcr.io/liwlin/innovation-diagnostic-report-generator@sha256:1752136cbc3ee8ec9c761378055ef7c619f5f2eea3aaab42e0df6a8e15cc83c4",
+  "postgres_image": "postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0",
+  "restart_recovery": {
+    "generation_id": "4a3f904a-4569-4f9f-8479-5ec653ad4ac5",
+    "status_before_restart": "queued",
+    "status_after_restart": "completed",
+    "artifact_count": 4,
+    "verdict": "pass"
+  },
+  "backup_restore": {
+    "monthly_style_backup": "makerseed_20260826T133043Z_v0.1.7.dump",
+    "monthly_style_backup_sha256": "b5fae00c5a893d4c5033a7b7de660a34c3d30329ae8bb70327941ce322c519c1",
+    "schema_version": "0002",
+    "checkpoint_counts": {
+      "users": 4,
+      "evaluations": 2,
+      "generations": 2
+    },
+    "restore_verdict_file": "restore-verification_20260826T133044Z.json",
+    "required_tables": 9,
+    "restore_verdict": "pass",
+    "disposable_database_removed": true
+  },
+  "upgrade_rollback_roll_forward": {
+    "pre_upgrade_backup": "makerseed_20260826T171948Z_v0.1.9.dump",
+    "pre_upgrade_hash_and_restore": "pass",
+    "db_container_id_persisted": "fa8444a5424b9bbc574947155a92e04d547a64d5b057d72ac17360e97f7576ea",
+    "upgrade_v0_1_7_to_v0_1_9": "pass",
+    "rollback_v0_1_9_to_v0_1_7": "pass",
+    "roll_forward_v0_1_7_to_v0_1_9": "pass",
+    "evaluation_generation_counts_after": "2/2"
+  },
+  "boundary": "Runbook and API evidence do not prove pending DSM, Cloud Sync, browser credential, access-removal, or final after-state items."
+}
