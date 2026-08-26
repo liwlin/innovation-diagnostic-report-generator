@@ -62,6 +62,8 @@ $preflightCommon = $preflight + (Get-Content -LiteralPath (Join-Path $projectRoo
 $envExample = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/env.example') -Raw -Encoding UTF8
 $composeYaml = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/compose.yaml') -Raw -Encoding UTF8
 $dockerfile = Get-Content -LiteralPath (Join-Path $projectRoot 'deploy/Dockerfile') -Raw -Encoding UTF8
+$dockerignore = Get-Content -LiteralPath (Join-Path $projectRoot '.dockerignore') -Raw -Encoding UTF8
+Assert-Condition ($dockerignore -match '(?m)^\.superpowers$') 'Docker build context must exclude .superpowers scratch artifacts.'
 Assert-Condition ($envExample -match 'REPORT_ROOT_PHASE=isolated') 'env.example must default hardware preflight to the isolated report-root phase.'
 Assert-Condition ($envExample -match 'REPORT_ROOT=/volume1/docker/makerseed-diagnostic/reports-staging') 'env.example must default reports to project-owned staging before File Station promotion.'
 Assert-Condition ($envExample -match 'RELEASE_ROOT=/volume1/docker/makerseed-diagnostic/releases/.+/deploy') 'env.example must use an immutable release deploy path.'
