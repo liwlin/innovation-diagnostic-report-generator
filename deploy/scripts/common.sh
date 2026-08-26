@@ -126,6 +126,26 @@ canonical_bind_source() {
   printf '%s\n' "$resolved"
 }
 
+validate_canonical_manifest_syntax() {
+  manifest=$1
+  if ! LC_ALL=C awk '
+    index($0, "  ") == 65 {
+      hash = substr($0, 1, 64)
+      rel = substr($0, 67)
+      if (hash !~ /^[0-9a-f]{64}$/ || rel == "" || rel ~ /^ / || rel ~ / $/ || rel ~ /^\// || rel ~ /(^|\/)-/ || rel ~ /\\/ || rel ~ /(^|\/)\.\.(\/|$)/ || rel ~ /[[:cntrl:]]/) exit 1
+      if (rel !~ /^[ -~]+$/) exit 1
+      if (last != "" && rel <= last) exit 1
+      if (seen[rel]++) exit 1
+      last = rel
+      next
+    }
+    { exit 1 }
+  ' "$manifest"; then
+    echo "ABORT: release tree manifest contains an unsafe path or hash" >&2
+    exit 52
+  fi
+}
+
 verify_release_tree() {
   release_base=$1
   manifest=$2
@@ -149,22 +169,7 @@ verify_release_tree() {
     echo "ABORT: release tree contains hardlinked files" >&2
     exit 52
   fi
-  if ! LC_ALL=C awk '
-    index($0, "  ") == 65 {
-      hash = substr($0, 1, 64)
-      rel = substr($0, 67)
-      if (hash !~ /^[0-9a-f]{64}$/ || rel == "" || rel ~ /^\// || rel ~ /(^|\/)-/ || rel ~ /\\/ || rel ~ /(^|\/)\.\.(\/|$)/ || rel ~ /[[:cntrl:]]/) exit 1
-      if (rel !~ /^[ -~]+$/) exit 1
-      if (last != "" && rel <= last) exit 1
-      if (seen[rel]++) exit 1
-      last = rel
-      next
-    }
-    { exit 1 }
-  ' "$manifest"; then
-    echo "ABORT: release tree manifest contains an unsafe path or hash" >&2
-    exit 52
-  fi
+  validate_canonical_manifest_syntax "$manifest"
   (
     cd "$release_base"
     find . -type f | sed 's#^\./##' | LC_ALL=C sort
@@ -261,6 +266,7 @@ verify_container_config_binding() {
   [ "$owner_config_real" = "$owner_release_deploy/compose.yaml" ] || { echo "ABORT: $purpose Compose config file resolves outside the release" >&2; exit 54; }
   owner_manifest=$owner_release_base/release-tree.sha256
   [ -f "$owner_manifest" ] && [ ! -L "$owner_manifest" ] || { echo "ABORT: $purpose release manifest is missing or unsafe" >&2; exit 54; }
+  validate_canonical_manifest_syntax "$owner_manifest"
   compose_manifest_lines=$(awk 'index($0, "  ") == 65 && substr($0, 67) == "deploy/compose.yaml" { c++ } END { print c + 0 }' "$owner_manifest")
   [ "$compose_manifest_lines" -eq 1 ] || { echo "ABORT: $purpose release manifest must bind exactly one deploy/compose.yaml" >&2; exit 54; }
   compose_manifest_line=$(awk 'index($0, "  ") == 65 && substr($0, 67) == "deploy/compose.yaml" { print }' "$owner_manifest")

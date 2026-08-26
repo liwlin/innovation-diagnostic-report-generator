@@ -126,6 +126,11 @@ Assert-Condition ($projectDirectoryPosition -ge 0 -and $projectDirectoryPosition
 Assert-Condition ($preflightCommon -match 'verify_container_config_binding') 'Preflight must bind legacy container config_files to a release manifest before accepting ownership.'
 Assert-Condition ($preflightCommon -match 'deploy/compose\.yaml') 'Preflight must verify the compose.yaml manifest entry for legacy container ownership.'
 Assert-Condition ($preflightCommon -match 'release-tree\.sha256') 'Preflight must verify a release-tree manifest for legacy container ownership.'
+Assert-Condition ($common -match 'validate_canonical_manifest_syntax\(\)') 'Common must define one shared canonical release manifest syntax validator.'
+$releaseTreeFunction = [regex]::Match($common, '(?ms)verify_release_tree\(\)\s*\{(?<body>.*?)\n\}').Groups['body'].Value
+$configBindingFunction = [regex]::Match($common, '(?ms)verify_container_config_binding\(\)\s*\{(?<body>.*?)\n\}').Groups['body'].Value
+Assert-Condition ($releaseTreeFunction -match 'validate_canonical_manifest_syntax "\$manifest"') 'Full release tree verification must call the shared canonical manifest syntax validator.'
+Assert-Condition ($configBindingFunction -match 'validate_canonical_manifest_syntax "\$owner_manifest"') 'Legacy config binding must call the shared canonical manifest syntax validator before consuming entries.'
 $ownerFunction = [regex]::Match($preflightCommon, '(?ms)verify_container_owner\(\)\s*\{(?<body>.*?)\n\}').Groups['body'].Value
 Assert-Condition (-not [string]::IsNullOrWhiteSpace($ownerFunction)) 'Shared container owner verifier is missing.'
 $projectLabelPosition = $ownerFunction.IndexOf('com.docker.compose.project"')

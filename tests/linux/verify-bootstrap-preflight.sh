@@ -485,10 +485,19 @@ legacy_release_root=$PROJECT_ROOT/releases/$legacy_release_id
 legacy_deploy_root=$legacy_release_root/deploy
 mkdir -p "$legacy_deploy_root"
 cp "$PROJECT_ROOT/releases/$RELEASE_ID/deploy/compose.yaml" "$legacy_deploy_root/compose.yaml"
-(
-  cd "$legacy_release_root"
-  sha256sum deploy/compose.yaml > release-tree.sha256
-)
+write_legacy_compose_manifest() {
+  (
+    cd "$legacy_release_root"
+    sha256sum deploy/compose.yaml > release-tree.sha256
+  )
+}
+legacy_compose_hash() {
+  (
+    cd "$legacy_release_root"
+    sha256sum deploy/compose.yaml | awk '{print $1}'
+  )
+}
+write_legacy_compose_manifest
 assert_runtime_collision_owner_result pass "legacy release-working-dir container with verified config" \
   FAKE_PORT_OWNER=legacy-app \
   FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
@@ -497,6 +506,38 @@ assert_runtime_collision_owner_result pass "stable project-root container with v
   FAKE_PORT_OWNER=modern-app \
   FAKE_OWNER_WORKING_DIR=$PROJECT_ROOT \
   FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+legacy_hash=$(legacy_compose_hash)
+printf '%s  deploy/compose.yaml\nnot-a-manifest\n' "$legacy_hash" >"$legacy_release_root/release-tree.sha256"
+assert_runtime_collision_owner_result fail "container with valid compose line plus malformed manifest extra" \
+  FAKE_PORT_OWNER=malformed-extra \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+printf '%s  deploy/compose.yaml\n%s  deploy/compose.yaml\n' "$legacy_hash" "$legacy_hash" >"$legacy_release_root/release-tree.sha256"
+assert_runtime_collision_owner_result fail "container with duplicate compose manifest entries" \
+  FAKE_PORT_OWNER=duplicate-compose \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  deploy/zzzz\n%s  deploy/compose.yaml\n' "$legacy_hash" >"$legacy_release_root/release-tree.sha256"
+assert_runtime_collision_owner_result fail "container with unsorted valid manifest entries" \
+  FAKE_PORT_OWNER=unsorted-manifest \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+printf '%s  deploy/compose.yaml\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  ../escape\n' "$legacy_hash" >"$legacy_release_root/release-tree.sha256"
+assert_runtime_collision_owner_result fail "container with traversal manifest extra" \
+  FAKE_PORT_OWNER=traversal-extra \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+printf '%s  deploy/compose.yaml\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  deploy/-name\n' "$legacy_hash" >"$legacy_release_root/release-tree.sha256"
+assert_runtime_collision_owner_result fail "container with dashed path manifest extra" \
+  FAKE_PORT_OWNER=dash-extra \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+printf '%s  deploy/compose.yaml\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  deploy/control\001path\n' "$legacy_hash" >"$legacy_release_root/release-tree.sha256"
+assert_runtime_collision_owner_result fail "container with control-character manifest extra" \
+  FAKE_PORT_OWNER=control-extra \
+  FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
+  FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
+write_legacy_compose_manifest
 assert_runtime_collision_owner_result fail "container from another Compose project" \
   FAKE_PORT_OWNER=foreign-app \
   FAKE_OWNER_PROJECT=other-project \
@@ -539,10 +580,7 @@ assert_runtime_collision_owner_result fail "container with mismatched config man
   FAKE_PORT_OWNER=mismatched-manifest \
   FAKE_OWNER_WORKING_DIR=$legacy_deploy_root \
   FAKE_OWNER_CONFIG_FILES=$legacy_deploy_root/compose.yaml
-(
-  cd "$legacy_release_root"
-  sha256sum deploy/compose.yaml > release-tree.sha256
-)
+write_legacy_compose_manifest
 rm "$legacy_deploy_root/compose.yaml"
 ln -s /tmp/foreign-compose.yaml "$legacy_deploy_root/compose.yaml"
 assert_runtime_collision_owner_result fail "container with symlinked config file" \
